@@ -60,6 +60,12 @@ async function fillPCORForm(data, pdfBytes, county) {
     const allCheckboxes = fields.filter(field => field.constructor.name === 'PDFCheckBox');
     console.log('Total checkboxes found: ' + allCheckboxes.length);
     
+    // Log all checkbox names for debugging
+    console.log('Checkbox field names:');
+    allCheckboxes.forEach((cb, index) => {
+      console.log(`  [${index}]: ${cb.getName()}`);
+    });
+    
     const dateInfo = formatDate(data.transferDate);
     
     // Build complete addresses
@@ -151,126 +157,101 @@ async function fillPCORForm(data, pdfBytes, county) {
       }
     }
     
-    // CHECKBOX HANDLING - Using index-based approach
-    // Most PCOR forms have checkboxes in a predictable order
+    // CHECKBOX HANDLING - HARDCODED FOR YOUR SPECIFIC NEEDS
+    // Based on your requirement: All NO except Section L is YES
     
-    // Define which checkboxes to check based on data
-    const checkboxesToCheck = [];
-    
-    // Principal Residence Question (usually first 2 checkboxes)
-    if (data.principalResidence === 'yes' || data.principalResidence === true || data.principalResidence === 'on') {
-      checkboxesToCheck.push(0); // YES checkbox (first one)
-    } else if (data.principalResidence === 'no' || data.principalResidence === false) {
-      checkboxesToCheck.push(1); // NO checkbox (second one)
-    }
-    
-    // Disabled Veteran Question (usually next 2 checkboxes)
-    if (data.disabledVeteran === 'yes') {
-      checkboxesToCheck.push(2); // YES checkbox (third one)
-    } else if (data.disabledVeteran === 'no') {
-      checkboxesToCheck.push(3); // NO checkbox (fourth one)
-    }
-    
-    // Part 1 Transfer Information - Exclusions
-    // These typically start around checkbox index 4-6
-    let exclusionStartIndex = 4;
-    
-    if (data.exclusions && Array.isArray(data.exclusions)) {
-      data.exclusions.forEach(exclusion => {
-        switch(exclusion) {
-          case 'spouses':
-            checkboxesToCheck.push(exclusionStartIndex); // Section A
-            break;
-          case 'domesticPartners':
-            checkboxesToCheck.push(exclusionStartIndex + 1); // Section B
-            break;
-          case 'parentChild':
-            checkboxesToCheck.push(exclusionStartIndex + 2); // Section C parent-child
-            checkboxesToCheck.push(exclusionStartIndex + 3); // between parent(s) and child(ren)
-            break;
-          case 'grandparentGrandchild':
-            checkboxesToCheck.push(exclusionStartIndex + 2); // Section C grandparent
-            checkboxesToCheck.push(exclusionStartIndex + 4); // between grandparent(s) and grandchild(ren)
-            break;
-          case 'cotenant':
-            checkboxesToCheck.push(exclusionStartIndex + 5); // Section D
-            break;
-          case 'over55':
-            checkboxesToCheck.push(exclusionStartIndex + 6); // Section E
-            break;
-          case 'disabled':
-            checkboxesToCheck.push(exclusionStartIndex + 7); // Section F
-            break;
-          case 'disaster':
-            checkboxesToCheck.push(exclusionStartIndex + 8); // Section G
-            break;
-        }
-      });
-    }
-    
-    // Special handling for specific counties if needed
-    if (county === 'los-angeles' && data.transferType) {
-      // Los Angeles might have different checkbox ordering
-      // Adjust indices as needed
-    }
-    
-    // Check the checkboxes by index
-    console.log('Attempting to check checkboxes at indices: ' + checkboxesToCheck.join(', '));
-    
-    checkboxesToCheck.forEach(index => {
-      if (index < allCheckboxes.length) {
+    try {
+      // For most PCOR forms, the checkboxes are in this order:
+      // [0-1]: Principal residence (YES/NO)
+      // [2-3]: Disabled veteran (YES/NO) 
+      // [4-5]: Section A (YES/NO)
+      // [6-7]: Section B (YES/NO)
+      // ... and so on
+      
+      // Principal Residence - Check NO (index 1)
+      if (allCheckboxes.length > 1) {
         try {
-          const checkbox = allCheckboxes[index];
-          const checkboxName = checkbox.getName();
-          
-          // Get the checkbox through the form to ensure we can manipulate it
-          const formCheckbox = form.getCheckBox(checkboxName);
-          formCheckbox.check();
-          
-          console.log(`✓ Checked checkbox [${index}]: "${checkboxName}"`);
+          const cb = form.getCheckBox(allCheckboxes[1].getName());
+          cb.check();
+          console.log('✓ Checked NO for Principal Residence');
         } catch (e) {
-          console.log(`✗ Could not check checkbox at index ${index}: ${e.message}`);
-          
-          // Alternative approach: try to manipulate the widget directly
-          try {
-            const checkbox = allCheckboxes[index];
-            const widgets = checkbox.acroField.getWidgets();
-            if (widgets && widgets.length > 0) {
-              // Set the appearance state directly
-              const states = widgets[0].getAppearanceStates();
-              if (states && states.length > 1) {
-                // Usually states[0] is unchecked, states[1] is checked
-                widgets[0].setAppearanceState(states[1]);
-                console.log(`✓ Set checkbox [${index}] via widget manipulation`);
-              }
+          console.log('✗ Could not check Principal Residence NO');
+        }
+      }
+      
+      // Disabled Veteran - Check NO (index 3)
+      if (allCheckboxes.length > 3) {
+        try {
+          const cb = form.getCheckBox(allCheckboxes[3].getName());
+          cb.check();
+          console.log('✓ Checked NO for Disabled Veteran');
+        } catch (e) {
+          console.log('✗ Could not check Disabled Veteran NO');
+        }
+      }
+      
+      // Section L - This is usually around index 22-26 depending on the form
+      // Look for checkbox related to trust/revocable trust
+      // Try multiple indices where Section L might be
+      const sectionLIndices = [22, 23, 24, 25, 26, 27, 28];
+      let sectionLFound = false;
+      
+      for (const idx of sectionLIndices) {
+        if (idx < allCheckboxes.length && !sectionLFound) {
+          const checkboxName = allCheckboxes[idx].getName();
+          // Check if this might be Section L (trust-related)
+          if (checkboxName && (
+              checkboxName.toLowerCase().includes('trust') ||
+              checkboxName.toLowerCase().includes('revocable') ||
+              checkboxName.toLowerCase().includes('l1') ||
+              checkboxName.toLowerCase().includes('section l')
+          )) {
+            try {
+              const cb = form.getCheckBox(checkboxName);
+              cb.check();
+              console.log(`✓ Checked Section L at index ${idx}: "${checkboxName}"`);
+              sectionLFound = true;
+            } catch (e) {
+              console.log(`✗ Could not check Section L at index ${idx}`);
             }
-          } catch (e2) {
-            console.log(`✗ Widget manipulation also failed for checkbox ${index}`);
           }
         }
       }
-    });
-    
-    // Also try checking by field name patterns for specific checkboxes
-    const namedCheckboxPatterns = {
-      'YES': data.principalResidence === 'yes',
-      'NO': data.principalResidence === 'no',
-      'Check Box1': data.principalResidence === 'yes',
-      'Check Box2': data.principalResidence === 'no',
-      'Check Box3': data.disabledVeteran === 'yes',
-      'Check Box4': data.disabledVeteran === 'no',
-    };
-    
-    for (const [pattern, shouldCheck] of Object.entries(namedCheckboxPatterns)) {
-      if (shouldCheck) {
+      
+      // If Section L not found by name, try by position (usually around checkbox 24-26)
+      if (!sectionLFound && allCheckboxes.length > 24) {
         try {
-          const checkbox = form.getCheckBox(pattern);
-          checkbox.check();
-          console.log(`✓ Checked checkbox by name: "${pattern}"`);
+          const cb = form.getCheckBox(allCheckboxes[24].getName());
+          cb.check();
+          console.log('✓ Checked Section L by position (index 24)');
         } catch (e) {
-          // This pattern didn't match any checkbox
+          console.log('✗ Could not check Section L by position');
         }
       }
+      
+      // Alternative: Check specific known checkbox names for Section L
+      const sectionLNames = [
+        'L1. This is a transfer of property to/from a revocable trust that may be revoked by the transferor and is for the benefit of the transferor and/or the transferor\'s spouse and/or registered domestic partner',
+        'L1. This is a transfer of property to/from a revocable trust that may be revoked by the transferor and is for the benefit of',
+        'Check Box25',
+        'Check Box26',
+        'YES_L1',
+        'L1'
+      ];
+      
+      for (const name of sectionLNames) {
+        try {
+          const cb = form.getCheckBox(name);
+          cb.check();
+          console.log(`✓ Checked Section L by name: "${name}"`);
+          break;
+        } catch (e) {
+          // This name didn't match
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error in checkbox handling:', error);
     }
     
     const pdfBytesResult = await pdfDoc.save();
@@ -317,14 +298,6 @@ exports.handler = async (event, context) => {
       data.buyerCity = data.propertyCity;
       data.buyerState = data.propertyState || 'CA';
       data.buyerZip = data.propertyZip;
-    }
-    
-    // Set default values for checkboxes if not provided
-    if (!data.principalResidence) {
-      data.principalResidence = 'yes'; // Default to YES for principal residence
-    }
-    if (!data.disabledVeteran) {
-      data.disabledVeteran = 'no'; // Default to NO for disabled veteran
     }
     
     const pdfBytes = await loadPDFTemplate(data.county);
