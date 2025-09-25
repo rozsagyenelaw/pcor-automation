@@ -18,22 +18,23 @@ function formatCurrency(value) {
 }
 
 async function loadPDFTemplate(county) {
-  // Map county names to actual file names in your repository
+  // Map county names to EXACT file names from your repository
   const templateMap = {
     'los-angeles': 'preliminary-change-of-ownership (1).pdf',
     'ventura': 'VENTURA County Form BOE-502-A for 2022 (14).pdf',
     'orange': 'ORANGE County Form BOE-502-A for 2021 (18).pdf',
     'san-bernardino': 'SAN_BERNARDINO County Form BOE-502-A for 2025 (23).pdf',
-    'riverside': 'RIVERSIDE County Form BOE-502-A for 2018 (6).pdf'
+    'riverside': 'RIVERSIDE County Form BOE-502-A for 2018 (6).pdf'  // Note: (6) not (18)
   };
   
   const templateFile = templateMap[county];
   if (!templateFile) {
+    console.error('Unknown county: ' + county);
+    console.log('Available counties:', Object.keys(templateMap));
     throw new Error('Unknown county: ' + county);
   }
   
   // Read the file from the local file system
-  // The path is relative to the function file location
   const templatePath = path.join(__dirname, '..', '..', 'templates', templateFile);
   
   try {
@@ -167,13 +168,13 @@ async function fillPCORForm(data, pdfBytes, county) {
     setTextField(['ZIP CODE', 'Zip', 'ZIP'], data.propertyZip);
     setTextField(['ASSESSOR\'S PARCEL NUMBER', 'APN', 'Parcel Number'], data.apn);
     setTextField(['SELLER/TRANSFEROR', 'Seller', 'Transferor'], data.sellerName);
-    setTextField(['BUYER/TRANSFEREE', 'Buyer', 'Transferee'], data.buyerName);
+    setTextField(['BUYER/TRANSFEREE', 'Buyer', 'Transferee', 'BUYER\'S NAME'], data.buyerName);
     setTextField(['MAIL PROPERTY TAX INFORMATION TO (NAME)', 'Mail To Name'], data.buyerName);
     setTextField(['MAIL PROPERTY TAX INFORMATION TO (ADDRESS)', 'Mail To Address'], data.buyerAddress);
-    setTextField(['Total purchase price', 'Purchase Price'], formatCurrency(data.purchasePrice));
-    setTextField(['Cash down payment', 'Down Payment'], formatCurrency(data.downPayment));
-    setTextField(['First deed of trust', 'First Loan'], formatCurrency(data.firstLoan));
-    setTextField(['Second deed of trust', 'Second Loan'], formatCurrency(data.secondLoan));
+    setTextField(['Total purchase price', 'Purchase Price', 'A. Total purchase price'], formatCurrency(data.purchasePrice));
+    setTextField(['Cash down payment', 'Down Payment', 'B. Cash down payment'], formatCurrency(data.downPayment));
+    setTextField(['First deed of trust', 'First Loan', 'C. First deed of trust'], formatCurrency(data.firstLoan));
+    setTextField(['Second deed of trust', 'Second Loan', 'D. Second deed of trust'], formatCurrency(data.secondLoan));
     
     // Set date fields
     setTextField(['MO', 'Month'], dateInfo.month);
@@ -203,16 +204,16 @@ async function fillPCORForm(data, pdfBytes, county) {
     
     // Handle exclusions
     if (data.exclusions && Array.isArray(data.exclusions)) {
-      setCheckbox(['between spouses', 'spouses'], data.exclusions.includes('spouses'));
-      setCheckbox(['parent(s) and child(ren)', 'parent child'], data.exclusions.includes('parentChild'));
-      setCheckbox(['grandparent(s) to grandchild(ren)', 'grandparent'], data.exclusions.includes('grandparentGrandchild'));
-      setCheckbox(['cotenant\'s death', 'cotenant'], data.exclusions.includes('cotenant'));
-      setCheckbox(['person 55 years', 'over 55'], data.exclusions.includes('over55'));
-      setCheckbox(['severely disabled', 'disabled'], data.exclusions.includes('disabled'));
+      setCheckbox(['between spouses', 'spouses', 'This transfer is solely between spouses'], data.exclusions.includes('spouses'));
+      setCheckbox(['parent(s) and child(ren)', 'parent child', 'between parent(s) and child(ren)'], data.exclusions.includes('parentChild'));
+      setCheckbox(['grandparent(s) to grandchild(ren)', 'grandparent', 'from grandparent(s) to grandchild(ren)'], data.exclusions.includes('grandparentGrandchild'));
+      setCheckbox(['cotenant\'s death', 'cotenant', 'This transfer is the result of a cotenant\'s death'], data.exclusions.includes('cotenant'));
+      setCheckbox(['person 55 years', 'over 55', 'This transaction is to replace a principal residence owned by a person 55 years of age or older'], data.exclusions.includes('over55'));
+      setCheckbox(['severely disabled', 'disabled', 'This transaction is to replace a principal residence by a person who is severely disabled'], data.exclusions.includes('disabled'));
     }
     
     // Handle principal residence checkbox
-    setCheckbox(['principal residence', 'Primary Residence'], data.principalResidence === 'on');
+    setCheckbox(['principal residence', 'Primary Residence', 'This property is intended as my principal residence'], data.principalResidence === 'on');
     
     const pdfBytesResult = await pdfDoc.save();
     return pdfBytesResult;
