@@ -32,7 +32,7 @@ async function loadPDFTemplate(county) {
   }
   
   // Use your deployed Netlify site URL
-  const url = `https://melodic-capybara-d4f2c8.netlify.app/templates/${templateFile}`;
+  const url = `https://pcorautomation.netlify.app/templates/${templateFile}`;
   
   try {
     console.log('Loading template for ' + county + ' from: ' + url);
@@ -349,3 +349,4 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
