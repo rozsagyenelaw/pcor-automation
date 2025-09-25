@@ -31,6 +31,7 @@ async function loadPDFTemplate(county) {
     throw new Error('Unknown county: ' + county);
   }
   
+  // Read from filesystem, not URL
   const templatePath = path.join(__dirname, '..', '..', 'templates', templateFile);
   
   try {
@@ -94,7 +95,7 @@ async function fillPCORForm(data, pdfBytes, county) {
         } catch (e) {
           fields.forEach(field => {
             const fieldName = field.getName();
-            if (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName)) {
+            if (fieldName && (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName))) {
               try {
                 const textField = form.getTextField(fieldName);
                 textField.setText(value.toString());
@@ -144,7 +145,7 @@ async function fillPCORForm(data, pdfBytes, county) {
         } catch (e) {
           fields.forEach(field => {
             const fieldName = field.getName();
-            if (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName)) {
+            if (fieldName && (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName))) {
               try {
                 const checkbox = form.getCheckBox(fieldName);
                 if (shouldCheck) {
