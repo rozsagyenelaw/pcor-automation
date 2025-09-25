@@ -21,11 +21,11 @@ async function loadPDFTemplate(county) {
   const fetch = (await import('node-fetch')).default;
   
   const templateMap = {
-    'los-angeles': 'preliminary-change-of-ownership__1_.pdf',
-    'ventura': 'VENTURA_County_Form_BOE-502-A_for_2022__14_.pdf',
-    'orange': 'ORANGE_County_Form_BOE-502-A_for_2021__18_.pdf',
-    'san-bernardino': 'SAN_BERNARDINO_County_Form_BOE-502-A_for_2025__23_.pdf',
-    'riverside': 'RIVERSIDE_County_Form_BOE-502-A_for_2018__6_.pdf'
+    'los-angeles': 'preliminary-change-of-ownership (1).pdf',
+    'ventura': 'VENTURA County Form BOE-502-A for 2022 (14).pdf',
+    'orange': 'ORANGE County Form BOE-502-A for 2021 (18).pdf',
+    'san-bernardino': 'SAN_BERNARDINO County Form BOE-502-A for 2025 (23).pdf',
+    'riverside': 'RIVERSIDE County Form BOE-502-A for 2018 (6).pdf'
   };
   
   const templateFile = templateMap[county];
@@ -33,7 +33,7 @@ async function loadPDFTemplate(county) {
     throw new Error('Unknown county: ' + county);
   }
   
-  const url = 'https://pcor-automation.netlify.app/templates/' + templateFile;
+  const url = 'https://melodic-capybara-d4f2c8.netlify.app/templates/' + encodeURIComponent(templateFile);
   
   try {
     console.log('Loading template for ' + county + ' from: ' + url);
