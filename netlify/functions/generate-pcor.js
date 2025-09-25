@@ -1,7 +1,7 @@
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 
 function formatDate(dateString) {
-  if (!dateString) return "";
+  if (!dateString) return {};
   const date = new Date(dateString);
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
@@ -31,7 +31,6 @@ async function loadPDFTemplate(county) {
     throw new Error('Unknown county: ' + county);
   }
   
-  // Use your deployed Netlify site URL
   const url = `https://pcorautomation.netlify.app/templates/${templateFile}`;
   
   try {
@@ -65,217 +64,197 @@ async function fillPCORForm(data, pdfBytes, county) {
     
     const dateInfo = formatDate(data.transferDate);
     
-    // Try to fill text fields with multiple possible field names
+    // Updated field mappings based on the correct field names
     const fieldMappings = {
       // Buyer/Transferee Information
-      'BUYER\'S DAYTIME TELEPHONE NUMBER': data.buyerPhone,
-      'Buyer Phone': data.buyerPhone,
-      'Telephone': data.buyerPhone,
-      
-      'BUYER\'S EMAIL ADDRESS': data.buyerEmail,
-      'Buyer Email': data.buyerEmail,
-      'Email': data.buyerEmail,
-      
-      'BUYER\'S NAME': data.buyerName,
-      'BUYER/TRANSFEREE': data.buyerName,
-      'Buyer': data.buyerName,
-      'Transferee': data.buyerName,
+      'Name and mailing address of buyer/transferee': data.buyerName,
+      'buyer\'s daytime telephone number1': data.buyerPhone,
+      'Buyer\'s email address': data.buyerEmail,
       
       // Property Information
-      'STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY': data.propertyAddress,
-      'Property Address': data.propertyAddress,
-      'Street Address': data.propertyAddress,
-      
-      'CITY': data.propertyCity,
-      'City': data.propertyCity,
-      
-      'STATE': 'CA',
-      'State': 'CA',
-      
-      'ZIP CODE': data.propertyZip,
-      'Zip': data.propertyZip,
-      'ZIP': data.propertyZip,
-      
-      'ASSESSOR\'S PARCEL NUMBER': data.apn,
-      'APN': data.apn,
-      'Parcel Number': data.apn,
+      'street address or physical location of real property': data.propertyAddress,
+      'city': data.propertyCity,
+      'state': 'CA',
+      'ZIP code': data.propertyZip,
+      'Assessors parcel number': data.apn,
       
       // Seller/Transferor Information
-      'SELLER/TRANSFEROR': data.sellerName,
-      'Seller': data.sellerName,
-      'Transferor': data.sellerName,
+      'seller transferor': data.sellerName,
+      'area code': data.sellerAreaCode,
       
-      // Mailing Address
-      'MAIL PROPERTY TAX INFORMATION TO (NAME)': data.buyerName,
-      'Mail To Name': data.buyerName,
-      
-      'MAIL PROPERTY TAX INFORMATION TO (ADDRESS)': data.buyerAddress,
-      'Mail To Address': data.buyerAddress,
-      
-      // Financial Information
-      'A. Total purchase price': formatCurrency(data.purchasePrice),
-      'Total purchase price': formatCurrency(data.purchasePrice),
-      'Purchase Price': formatCurrency(data.purchasePrice),
-      
-      'B. Cash down payment or value of trade or exchange excluding closing costs': formatCurrency(data.downPayment),
-      'Cash down payment': formatCurrency(data.downPayment),
-      'Down Payment': formatCurrency(data.downPayment),
-      
-      'C. First deed of trust': formatCurrency(data.firstLoan),
-      'First deed of trust': formatCurrency(data.firstLoan),
-      'First Loan': formatCurrency(data.firstLoan),
-      
-      'D. Second deed of trust': formatCurrency(data.secondLoan),
-      'Second deed of trust': formatCurrency(data.secondLoan),
-      'Second Loan': formatCurrency(data.secondLoan),
-      
-      // Date fields
-      'MO': dateInfo.month,
+      // Transfer Date
       'Month': dateInfo.month,
+      'day': dateInfo.day,
+      'year': dateInfo.year,
       
-      'DAY': dateInfo.day,
-      'Day': dateInfo.day,
+      // Mailing Information
+      'mail property tax information to (name)': data.buyerName,
+      'Mail property tax informatino to address': data.buyerAddress,
       
-      'YEAR': dateInfo.year,
-      'Year': dateInfo.year,
+      // Purchase Information
+      'Total purchase price': formatCurrency(data.purchasePrice),
+      'Cash down payment or value of trade or exchange excluding closing costs': formatCurrency(data.downPayment),
+      
+      // First Loan Information
+      'First deed of trust amount': formatCurrency(data.firstLoan),
+      'First deed of trust interest': data.firstLoanInterest,
+      'First deed of trust interest for': data.firstLoanTerm,
+      'First deed of trust monthly payment': formatCurrency(data.firstLoanPayment),
+      
+      // Second Loan Information
+      'D. Second deed of trust amount': formatCurrency(data.secondLoan),
+      'D. Second deed of trust @': data.secondLoanInterest,
+      'D. Second deed of trust interest for': data.secondLoanTerm,
+      'D. Second deed of trust monthly payment': formatCurrency(data.secondLoanPayment),
+      
+      // Balloon Payment Information
+      'C. Balloon payment amount': formatCurrency(data.balloonAmount),
+      'C. Balloon payment due date': data.balloonDueDate,
+      'D. Balloon payment_2': formatCurrency(data.secondBalloonAmount),
+      'D. Balloon payment due date': data.secondBalloonDueDate,
+      
+      // Other Financial Information
+      'E. Outstanding balance': formatCurrency(data.outstandingBalance),
+      'F. Amount, if any, of real estate commissino fees paid by the buyer which are not included in the purchase price': formatCurrency(data.commissionFees),
+      
+      // Broker Information
+      'G. broker name': data.brokerName,
+      'G. area code2': data.brokerAreaCode,
+      'G. brokers telephone number': data.brokerPhone,
+      
+      // Signature Section on Page 2
+      'Name of buyer/transferee/personal representative/corporate officer (please print)': data.signatureName || (data.buyerName ? data.buyerName + ' as Trustor/Trustee' : ''),
+      'Date signed by buyer/transferee or corporate officer': data.signatureDate || formatDate(new Date()).full,
+      'title': data.signatureTitle || 'Trustor/Trustee',
+      'email address': data.signatureEmail || data.buyerEmail,
+      'area code3': data.signatureAreaCode || data.buyerAreaCode,
+      'Buyer/transferee/legal representative telephone number': data.signaturePhone || data.buyerPhone,
     };
     
     // Fill text fields
-    for (const [fieldPattern, value] of Object.entries(fieldMappings)) {
+    for (const [fieldName, value] of Object.entries(fieldMappings)) {
       if (value) {
-        // Try exact match first
         try {
-          const field = form.getTextField(fieldPattern);
+          const field = form.getTextField(fieldName);
           field.setText(value.toString());
-          console.log('Set field "' + fieldPattern + '" to "' + value + '"');
-          continue;
+          console.log('Set field "' + fieldName + '" to "' + value + '"');
         } catch (e) {
-          // Field not found with exact name
-        }
-        
-        // Try to find field by partial match
-        const foundField = fields.find(field => {
-          const fieldName = field.getName();
-          if (!fieldName) return false;
+          // Try case-insensitive match
+          const foundField = fields.find(field => {
+            const name = field.getName();
+            return name && name.toLowerCase() === fieldName.toLowerCase();
+          });
           
-          // Check if field name contains pattern or pattern contains field name
-          return fieldName.toLowerCase().includes(fieldPattern.toLowerCase()) ||
-                 fieldPattern.toLowerCase().includes(fieldName.toLowerCase());
-        });
-        
-        if (foundField) {
-          try {
-            const textField = form.getTextField(foundField.getName());
-            textField.setText(value.toString());
-            console.log('Set field "' + foundField.getName() + '" to "' + value + '" (pattern match)');
-          } catch (e) {
-            // Field might not be a text field
+          if (foundField && foundField.constructor.name === 'PDFTextField') {
+            try {
+              const textField = form.getTextField(foundField.getName());
+              textField.setText(value.toString());
+              console.log('Set field "' + foundField.getName() + '" to "' + value + '" (case-insensitive match)');
+            } catch (e2) {
+              console.log('Could not set field "' + fieldName + '": ' + e2.message);
+            }
           }
         }
       }
     }
     
-    // Handle checkboxes
+    // Handle checkboxes with exact field names
     const checkboxMappings = {
-      // Principal residence
-      'This property is intended as my principal residence': data.principalResidence === 'on',
-      'principal residence': data.principalResidence === 'on',
+      // Principal Residence
+      'This property is intended as my principal residence. If YES, please indicate the date of occupancy or intended occupancy': data.principalResidence === 'on',
       
-      // Transfer exclusions
-      'This transfer is solely between spouses': data.exclusions && data.exclusions.includes('spouses'),
-      'between spouses': data.exclusions && data.exclusions.includes('spouses'),
-      'spouses': data.exclusions && data.exclusions.includes('spouses'),
+      // Disabled Veteran Status
+      'Are you a disabled veteran or an unmarried surviving spouse of a disabled veteran who was compensated at 100% by the Department of Veterans Affairs': data.disabledVeteran === 'yes',
+      'Are you a disabled veteran or an unmarried surviving spouse of a disabled veteran who was compensated at 100% by the Department of Veterans Affairs_no': data.disabledVeteran === 'no',
       
-      'between parent(s) and child(ren)': data.exclusions && data.exclusions.includes('parentChild'),
-      'parent child': data.exclusions && data.exclusions.includes('parentChild'),
-      'parent(s) and child(ren)': data.exclusions && data.exclusions.includes('parentChild'),
+      // Transfer Types - Section A-G
+      'A. This transfer is solely between spouses (addition or removal of a spouse, death of a spouse, divorce settlement, etc.)': data.exclusions && data.exclusions.includes('spouses'),
+      'B. This transfer is solely between domestic partners currently registered with the California Secretary of State (addition or removal of a partner, death of a partner, termination settlement, etc.)': data.exclusions && data.exclusions.includes('domesticPartners'),
+      'C. This is a transfer between: parents and children or grandparents and grandchildren': data.exclusions && data.exclusions.includes('parentChild'),
+      'C. This is a transfer between parent(s) and child(ren)': data.exclusions && data.exclusions.includes('parentChild'),
+      'D.This transfer is the result of a cotenant\'s death': data.exclusions && data.exclusions.includes('cotenant'),
+      'E. This transaction is to replace a principal residence by a person 55 years of age or older': data.exclusions && data.exclusions.includes('over55'),
+      'F. This transaction is to replace a principal residence by a person who is severely disabled as defined by Revenue and Taxation Code section 69.5': data.exclusions && data.exclusions.includes('disabled'),
+      'G. This transaction is to replace a principal residence substantially damaged or destroyed by a wildfire or natural disaster for which the Governor proclaimed a state of emergency._1': data.exclusions && data.exclusions.includes('disaster'),
       
-      'from grandparent(s) to grandchild(ren)': data.exclusions && data.exclusions.includes('grandparentGrandchild'),
-      'grandparent grandchild': data.exclusions && data.exclusions.includes('grandparentGrandchild'),
-      'grandparent': data.exclusions && data.exclusions.includes('grandparentGrandchild'),
+      // Property Types
+      'A. Type of property transferred': data.propertyType === 'single-family',
+      'A. Type of property transferred1': data.propertyType === 'multi-family',
+      'A. Type of property transferred2': data.propertyType === 'commercial',
+      'A. Type of property transferred3': data.propertyType === 'condominium',
+      'A. Type of property transferred4': data.propertyType === 'co-op',
+      'A. Type of property transferred5': data.propertyType === 'manufactured',
+      'A. Type of property transferred6': data.propertyType === 'unimproved',
+      'A. Type of property transferred7': data.propertyType === 'timeshare',
+      'A. Type of property transferred8': data.propertyType === 'other',
       
-      'This transfer is the result of a cotenant\'s death': data.exclusions && data.exclusions.includes('cotenant'),
-      'cotenant\'s death': data.exclusions && data.exclusions.includes('cotenant'),
-      'cotenant': data.exclusions && data.exclusions.includes('cotenant'),
+      // Transfer Type
+      'B. Type of transfer': data.transferType === 'purchase',
       
-      'This transaction is to replace a principal residence owned by a person 55 years of age or older': data.exclusions && data.exclusions.includes('over55'),
-      'person 55 years': data.exclusions && data.exclusions.includes('over55'),
-      'over 55': data.exclusions && data.exclusions.includes('over55'),
+      // Loan Types
+      'C. First deed of trust': data.firstLoanType === 'new',
+      'C. First deed of trust Bank/Savings': data.firstLoanSource === 'bank',
+      'C. First deed of trust Loan Carried by seller': data.firstLoanSource === 'seller',
+      'C. Balloon payment': data.hasFirstBalloon === 'yes',
       
-      'This transaction is to replace a principal residence by a person who is severely disabled': data.exclusions && data.exclusions.includes('disabled'),
-      'severely disabled': data.exclusions && data.exclusions.includes('disabled'),
-      'disabled': data.exclusions && data.exclusions.includes('disabled'),
+      'D. Second deed of trust fixed rate': data.secondLoanRateType === 'fixed',
+      'D. Second deed of trust variable rate': data.secondLoanRateType === 'variable',
+      'D. Second deed of trust bank/savings & loan/credit union': data.secondLoanSource === 'bank',
+      'D. Second deed of trust loan carried by seller': data.secondLoanSource === 'seller',
+      'D. Balloon payment': data.hasSecondBalloon === 'yes',
       
-      // Transfer type
-      'Purchase': data.transferType === 'purchase',
-      'Gift': data.transferType === 'gift',
-      'Inheritance': data.transferType === 'inheritance',
-      'Foreclosure': data.transferType === 'foreclosure',
-      'Trade or exchange': data.transferType === 'trade',
-      'Trade': data.transferType === 'trade',
+      // Other Options
+      'C. A manufactured home is included in the purchase price': data.manufacturedHome === 'yes',
+      'C. The manufactured home is subject to local property tax': data.manufacturedHomeTax === 'yes',
+      'D. The property produces rental or other income': data.hasRentalIncome === 'yes',
+      'E. within the same county?': data.sameCounty === 'yes',
+      'Within the same county?': data.sameCounty === 'no',
+      'E. Was an improvement Bond or other public financing assumed by the buyer?': data.publicFinancing === 'yes',
       
-      // Property type
-      'Single-family residence': data.propertyType === 'single-family',
-      'Single Family': data.propertyType === 'single-family',
+      // Property Condition
+      'E. The condition of the property at the time of sale was': data.propertyCondition === 'good',
+      'E. The condition of the property at the time of sale was1': data.propertyCondition === 'average',
+      'E. The condition of the property at the time of sale was2': data.propertyCondition === 'fair',
+      'E. The condition of the property at the time of sale was3': data.propertyCondition === 'poor',
       
-      'Multiple-family residence': data.propertyType === 'multi-family',
-      'Multi Family': data.propertyType === 'multi-family',
-      
-      'Commercial/Industrial': data.propertyType === 'commercial',
-      'Commercial': data.propertyType === 'commercial',
-      
-      'Condominium': data.propertyType === 'condominium',
-      'Co-op/Own-your-own': data.propertyType === 'co-op',
-      'Co-op': data.propertyType === 'co-op',
-      
-      'Manufactured home': data.propertyType === 'manufactured',
-      'Manufactured': data.propertyType === 'manufactured',
-      
-      'Unimproved lot': data.propertyType === 'unimproved',
-      'Vacant Land': data.propertyType === 'unimproved',
-      
-      'Timeshare': data.propertyType === 'timeshare',
+      // Income Sources
+      'D. Income is from': data.incomeSource === 'commercial',
+      'Income is from_1': data.incomeSource === 'residential',
+      'Income is from‑2': data.incomeSource === 'farm',
+      'Income is from_3': data.incomeSource === 'other',
     };
     
     // Set checkboxes
-    for (const [fieldPattern, shouldCheck] of Object.entries(checkboxMappings)) {
+    for (const [fieldName, shouldCheck] of Object.entries(checkboxMappings)) {
       if (shouldCheck !== undefined) {
-        // Try exact match first
         try {
-          const checkbox = form.getCheckBox(fieldPattern);
+          const checkbox = form.getCheckBox(fieldName);
           if (shouldCheck) {
             checkbox.check();
           } else {
             checkbox.uncheck();
           }
-          console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldPattern + '"');
-          continue;
+          console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldName + '"');
         } catch (e) {
-          // Field not found with exact name
-        }
-        
-        // Try to find checkbox by partial match
-        const foundField = fields.find(field => {
-          const fieldName = field.getName();
-          if (!fieldName) return false;
+          // Try case-insensitive match
+          const foundField = fields.find(field => {
+            const name = field.getName();
+            return name && name.toLowerCase() === fieldName.toLowerCase() && 
+                   field.constructor.name === 'PDFCheckBox';
+          });
           
-          // Check if field name contains pattern or pattern contains field name
-          return (fieldName.toLowerCase().includes(fieldPattern.toLowerCase()) ||
-                  fieldPattern.toLowerCase().includes(fieldName.toLowerCase())) &&
-                 field.constructor.name === 'PDFCheckBox';
-        });
-        
-        if (foundField) {
-          try {
-            const checkbox = form.getCheckBox(foundField.getName());
-            if (shouldCheck) {
-              checkbox.check();
-            } else {
-              checkbox.uncheck();
+          if (foundField) {
+            try {
+              const checkbox = form.getCheckBox(foundField.getName());
+              if (shouldCheck) {
+                checkbox.check();
+              } else {
+                checkbox.uncheck();
+              }
+              console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + foundField.getName() + '" (case-insensitive match)');
+            } catch (e2) {
+              console.log('Could not check/uncheck field "' + fieldName + '": ' + e2.message);
             }
-            console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + foundField.getName() + '" (pattern match)');
-          } catch (e) {
-            // Error checking/unchecking
           }
         }
       }
@@ -349,4 +328,3 @@ exports.handler = async (event, context) => {
     };
   }
 };
-
