@@ -80,11 +80,11 @@ exports.handler = async (event, context) => {
 // Extract grantee - this becomes the grantor for trust deed
 function extractGrantee(text) {
   const patterns = [
-    // Pattern for "GRANT(s) to NAME AND NAME" - FIXED
+    // Pattern for "GRANT(s) to NAME AND NAME" - FIXED closing parenthesis
     /GRANT(?:S)?\s+to\s+([A-Z][A-Z\s\.\-]+?(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)\s*,?\s*(?:husband|wife|Husband|Wife|as\s+Joint\s+Tenants)?/mi,
-    // Pattern for "hereby GRANT to" - FIXED
+    // Pattern for "hereby GRANT to" - FIXED closing parenthesis
     /hereby\s+GRANT(?:S)?\s+to\s+([A-Z][A-Z\s\.\-]+?(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)\s*,?\s*(?:husband|wife|Husband|Wife|as\s+Joint\s+Tenants)?/mi,
-    // Pattern with line breaks - FIXED
+    // Pattern with line breaks - FIXED closing parenthesis
     /GRANT(?:S)?\s+to:?\s*\n?\s*([A-Z][A-Z\s\.\-]+?(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)\s*,?\s*(?:husband|wife|Husband|Wife|as\s+Joint\s+Tenants)?/mi
   ];
   
