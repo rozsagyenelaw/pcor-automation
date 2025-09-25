@@ -3,21 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>California PCOR Form Automation</title>
+    <title>Trust Transfer & PCOR Automation</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }
-
         .container {
             max-width: 1000px;
             margin: 0 auto;
@@ -26,520 +20,652 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             overflow: hidden;
         }
-
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .header {
+            background: linear-gradient(135deg, #5e72e4 0%, #825ee4 100%);
             color: white;
             padding: 30px;
             text-align: center;
         }
-
-        header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
+        .tabs {
+            display: flex;
+            background: #f7f9fc;
+            border-bottom: 2px solid #e0e6ed;
         }
-
-        header p {
-            font-size: 1.1rem;
-            opacity: 0.95;
-        }
-
-        .form-container {
-            padding: 40px;
-        }
-
-        .county-selector {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-
-        .county-selector label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        .county-selector select {
-            width: 100%;
-            padding: 12px;
-            font-size: 16px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            background: white;
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
             cursor: pointer;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
+            font-weight: 600;
         }
-
-        .county-selector select:focus {
-            outline: none;
-            border-color: #667eea;
+        .tab.active {
+            background: white;
+            color: #5e72e4;
+            border-bottom: 3px solid #5e72e4;
         }
-
-        .form-section {
-            margin-bottom: 30px;
-            padding: 25px;
-            background: #f8f9fa;
-            border-radius: 10px;
+        .content {
+            padding: 30px;
         }
-
-        .form-section h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 1.4rem;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
+        .tab-content {
+            display: none;
         }
-
+        .tab-content.active {
+            display: block;
+        }
+        .upload-area {
+            border: 3px dashed #5e72e4;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            background: #f7f9fc;
+        }
+        .upload-area.dragover {
+            background: #e8ecff;
+            border-color: #4c63d2;
+        }
+        .upload-area.has-file {
+            background: #e8fff0;
+            border-color: #22c55e;
+        }
         .form-group {
             margin-bottom: 20px;
         }
-
-        .form-group label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 8px;
-            color: #555;
-        }
-
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            font-size: 15px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            transition: border-color 0.3s, box-shadow 0.3s;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .form-group textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
         }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #32325d;
         }
-
-        .checkbox-group input[type="checkbox"] {
-            width: auto;
-            margin-right: 10px;
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e6ed;
+            border-radius: 8px;
+            font-size: 14px;
         }
-
-        .checkbox-group label {
-            margin-bottom: 0;
-            font-weight: normal;
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #5e72e4;
+            box-shadow: 0 0 0 3px rgba(94, 114, 228, 0.1);
         }
-
-        .btn-container {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 30px;
-        }
-
         .btn {
-            padding: 12px 30px;
+            background: linear-gradient(135deg, #5e72e4 0%, #825ee4 100%);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
-            border: none;
-            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            transition: transform 0.2s;
+            display: inline-block;
         }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
+        .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
-
         .btn-secondary {
             background: #6c757d;
-            color: white;
+            margin-left: 10px;
         }
-
-        .btn-secondary:hover {
-            background: #5a6268;
+        .extracted-info {
+            background: #f7f9fc;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
         }
-
+        .info-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .info-section h3 {
+            color: #5e72e4;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e0e6ed;
+            padding-bottom: 10px;
+        }
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            display: none;
+        }
         .loading {
             display: none;
             text-align: center;
             padding: 20px;
         }
-
-        .loading.active {
-            display: block;
-        }
-
         .spinner {
             border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
+            border-top: 3px solid #5e72e4;
             border-radius: 50%;
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
+            margin: 0 auto;
         }
-
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        .results {
-            display: none;
-            padding: 30px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            margin-top: 30px;
+        .help-text {
+            font-size: 12px;
+            color: #8898aa;
+            margin-top: 5px;
         }
-
-        .results.active {
-            display: block;
+        .editable-field {
+            background: #fff;
+            border: 2px solid #e0e6ed;
+            padding: 8px 12px;
+            border-radius: 6px;
+            min-height: 38px;
+            cursor: text;
         }
-
-        .results h3 {
-            color: #333;
-            margin-bottom: 20px;
+        .editable-field:hover {
+            border-color: #5e72e4;
         }
-
-        .pdf-link {
+        .field-status {
             display: inline-block;
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            margin: 10px;
-            transition: background 0.3s;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-left: 10px;
         }
-
-        .pdf-link:hover {
-            background: #218838;
+        .field-status.extracted {
+            background: #d4edda;
+            color: #155724;
         }
-
-        .error {
-            color: #dc3545;
-            padding: 15px;
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            border-radius: 6px;
-            margin-top: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-            
-            header h1 {
-                font-size: 1.8rem;
-            }
+        .field-status.manual {
+            background: #fff3cd;
+            color: #856404;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>California PCOR Form Automation</h1>
-            <p>Preliminary Change of Ownership Report Generator</p>
-        </header>
-
-        <div class="form-container">
-            <div class="county-selector">
-                <label for="county">Select County:</label>
-                <select id="county" required>
-                    <option value="">-- Choose County --</option>
-                    <option value="los-angeles">Los Angeles County</option>
-                    <option value="ventura">Ventura County</option>
-                    <option value="orange">Orange County</option>
-                    <option value="san-bernardino">San Bernardino County</option>
-                    <option value="riverside">Riverside County</option>
-                </select>
-            </div>
-
-            <form id="pcorForm">
-                <div class="form-section">
-                    <h2>Buyer/Transferee Information</h2>
-                    <div class="form-group">
-                        <label for="buyerName">Name(s) of Buyer/Transferee:</label>
-                        <input type="text" id="buyerName" name="buyerName" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="buyerAddress">Mailing Address:</label>
-                        <input type="text" id="buyerAddress" name="buyerAddress" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="buyerCity">City:</label>
-                            <input type="text" id="buyerCity" name="buyerCity" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="buyerState">State:</label>
-                            <input type="text" id="buyerState" name="buyerState" value="CA" required>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="buyerZip">Zip Code:</label>
-                            <input type="text" id="buyerZip" name="buyerZip" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="buyerPhone">Phone Number:</label>
-                            <input type="tel" id="buyerPhone" name="buyerPhone" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="buyerEmail">Email Address:</label>
-                        <input type="email" id="buyerEmail" name="buyerEmail">
+        <div class="header">
+            <h1>🏠 Trust Transfer & PCOR Automation</h1>
+            <p>Generate Trust Transfer Deeds and PCOR Forms Automatically</p>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('upload', this)">Step 1: Upload Deed</div>
+            <div class="tab" onclick="switchTab('trust-info', this)">Step 2: Trust Information</div>
+            <div class="tab" onclick="switchTab('generate', this)">Step 3: Generate Documents</div>
+        </div>
+        
+        <div class="content">
+            <!-- Step 1: Upload Deed -->
+            <div id="upload" class="tab-content active">
+                <h2>Upload Original Deed</h2>
+                <p>Upload the original deed PDF to automatically extract information.</p>
+                
+                <div class="upload-area" id="deed-upload-area" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                    <input type="file" id="deed-file" accept=".pdf" style="display: none" onchange="handleDeedUpload(event)">
+                    <div onclick="document.getElementById('deed-file').click()">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#5e72e4" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <h3>Upload Original Deed (PDF)</h3>
+                        <p>Click to browse or drag and drop</p>
+                        <div id="uploaded-file-name" style="margin-top: 10px; font-weight: 600; color: #22c55e;"></div>
                     </div>
                 </div>
-
-                <div class="form-section">
-                    <h2>Property Information</h2>
-                    <div class="form-group">
-                        <label for="apn">Assessor's Parcel Number (APN):</label>
-                        <input type="text" id="apn" name="apn" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="propertyAddress">Street Address of Property:</label>
-                        <input type="text" id="propertyAddress" name="propertyAddress" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="propertyCity">City:</label>
-                            <input type="text" id="propertyCity" name="propertyCity" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="propertyZip">Zip Code:</label>
-                            <input type="text" id="propertyZip" name="propertyZip" required>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>Seller/Transferor Information</h2>
-                    <div class="form-group">
-                        <label for="sellerName">Name(s) of Seller/Transferor:</label>
-                        <input type="text" id="sellerName" name="sellerName" required>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>Transfer Information</h2>
-                    <div class="form-group">
-                        <label for="transferDate">Date of Transfer:</label>
-                        <input type="date" id="transferDate" name="transferDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="transferType">Type of Transfer:</label>
-                        <select id="transferType" name="transferType" required>
-                            <option value="">-- Select Type --</option>
-                            <option value="purchase">Purchase</option>
-                            <option value="gift">Gift</option>
-                            <option value="inheritance">Inheritance</option>
-                            <option value="foreclosure">Foreclosure</option>
-                            <option value="trade">Trade or Exchange</option>
-                            <option value="contract">Contract of Sale</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="principalResidence" name="principalResidence">
-                        <label for="principalResidence">This property is intended as my principal residence</label>
-                    </div>
-                    <div class="form-group" id="occupancyDateGroup" style="display:none;">
-                        <label for="occupancyDate">Date of Occupancy:</label>
-                        <input type="date" id="occupancyDate" name="occupancyDate">
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>Purchase Price and Terms of Sale</h2>
-                    <div class="form-group">
-                        <label for="purchasePrice">Total Purchase Price:</label>
-                        <input type="number" id="purchasePrice" name="purchasePrice" step="0.01" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="downPayment">Cash Down Payment:</label>
-                        <input type="number" id="downPayment" name="downPayment" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label for="firstLoan">First Deed of Trust Amount:</label>
-                        <input type="number" id="firstLoan" name="firstLoan" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label for="secondLoan">Second Deed of Trust Amount (if any):</label>
-                        <input type="number" id="secondLoan" name="secondLoan" step="0.01">
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>Property Type</h2>
-                    <div class="form-group">
-                        <label for="propertyType">Type of Property:</label>
-                        <select id="propertyType" name="propertyType" required>
-                            <option value="">-- Select Type --</option>
-                            <option value="single-family">Single-family residence</option>
-                            <option value="multi-family">Multiple-family residence</option>
-                            <option value="commercial">Commercial/Industrial</option>
-                            <option value="condominium">Condominium</option>
-                            <option value="co-op">Co-op/Own-your-own</option>
-                            <option value="manufactured">Manufactured home</option>
-                            <option value="unimproved">Unimproved lot</option>
-                            <option value="timeshare">Timeshare</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="unitsGroup" style="display:none;">
-                        <label for="units">Number of Units:</label>
-                        <input type="number" id="units" name="units" min="1">
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h2>Transfer Exclusions (Check all that apply)</h2>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="betweenSpouses" name="exclusions" value="spouses">
-                        <label for="betweenSpouses">Transfer solely between spouses</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="parentChild" name="exclusions" value="parentChild">
-                        <label for="parentChild">Transfer between parent(s) and child(ren)</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="grandparentGrandchild" name="exclusions" value="grandparentGrandchild">
-                        <label for="grandparentGrandchild">Transfer from grandparent(s) to grandchild(ren)</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="cotenant" name="exclusions" value="cotenant">
-                        <label for="cotenant">Result of cotenant's death</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="over55" name="exclusions" value="over55">
-                        <label for="over55">Principal residence replacement by person 55 years or older</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="disabled" name="exclusions" value="disabled">
-                        <label for="disabled">Principal residence replacement by severely disabled person</label>
-                    </div>
-                </div>
-
-                <div class="btn-container">
-                    <button type="button" class="btn btn-secondary" onclick="clearForm()">Clear Form</button>
-                    <button type="submit" class="btn btn-primary">Generate PCOR</button>
-                </div>
-
-                <div class="loading" id="loading">
+                
+                <div class="loading" id="ocr-loading">
                     <div class="spinner"></div>
-                    <p>Generating your PCOR form...</p>
+                    <p>Extracting information from deed...</p>
                 </div>
-
-                <div class="results" id="results">
-                    <h3>Your PCOR Form is Ready!</h3>
-                    <div id="downloadLinks"></div>
+                
+                <div class="success-message" id="upload-success">
+                    ✓ Deed uploaded successfully! Information extracted. Please review and edit in the next step.
                 </div>
-
-                <div class="error" id="error" style="display:none;"></div>
-            </form>
+                
+                <div class="error-message" id="upload-error">
+                    ✗ Error processing deed. Please try again or enter information manually.
+                </div>
+            </div>
+            
+            <!-- Step 2: Trust Information -->
+            <div id="trust-info" class="tab-content">
+                <h2>Review and Edit Information</h2>
+                <p>Review the extracted information and make any necessary corrections. Fill in any missing fields.</p>
+                
+                <!-- Trust Details Section -->
+                <div class="info-section">
+                    <h3>Trust Information</h3>
+                    <div class="form-group">
+                        <label>Trust Name <span class="help-text">(e.g., "NGUYEN FAMILY LIVING TRUST")</span></label>
+                        <input type="text" id="trust-name" placeholder="Enter trust name">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Trust Date</label>
+                            <input type="date" id="trust-date">
+                        </div>
+                        <div class="form-group">
+                            <label>Trust Type</label>
+                            <select id="trust-type">
+                                <option value="living">Living Trust</option>
+                                <option value="revocable">Revocable Trust</option>
+                                <option value="family">Family Trust</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Grantor Information (From Original Deed's Grantee) -->
+                <div class="info-section">
+                    <h3>Grantor Information (Trustees)</h3>
+                    <p class="help-text">The grantee from the original deed becomes the grantor of the trust transfer deed</p>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Grantor 1 (Trustee 1) <span class="field-status" id="grantor1-status"></span></label>
+                            <input type="text" id="grantor1-name" placeholder="First Grantor/Trustee Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Grantor 2 (Trustee 2) <span class="field-status" id="grantor2-status"></span></label>
+                            <input type="text" id="grantor2-name" placeholder="Second Grantor/Trustee Name (if applicable)">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Ownership Type</label>
+                        <select id="ownership-type">
+                            <option value="husband-wife-joint">Husband and Wife as Joint Tenants</option>
+                            <option value="joint-tenants">As Joint Tenants</option>
+                            <option value="community-property">As Community Property</option>
+                            <option value="tenants-common">As Tenants in Common</option>
+                            <option value="single">A Single Person</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Property Information -->
+                <div class="info-section">
+                    <h3>Property Information</h3>
+                    <div class="form-group">
+                        <label>Property Address <span class="field-status" id="property-status"></span></label>
+                        <input type="text" id="property-address" placeholder="123 Main St, City, CA 12345">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>City</label>
+                            <input type="text" id="property-city" placeholder="City">
+                        </div>
+                        <div class="form-group">
+                            <label>ZIP Code</label>
+                            <input type="text" id="property-zip" placeholder="12345">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>APN (Assessor's Parcel Number) <span class="field-status" id="apn-status"></span></label>
+                        <input type="text" id="apn" placeholder="XXX-XXX-XX">
+                    </div>
+                    <div class="form-group">
+                        <label>Legal Description <span class="field-status" id="legal-status"></span></label>
+                        <textarea id="legal-description" rows="4" placeholder="Lot X of Tract No. XXXX as per map recorded..."></textarea>
+                    </div>
+                </div>
+                
+                <!-- Mailing Information -->
+                <div class="info-section">
+                    <h3>Mailing Information</h3>
+                    <div class="form-group">
+                        <label>Mailing Address <span class="help-text">(Where to send recorded documents)</span></label>
+                        <input type="text" id="mailing-address" placeholder="Street Address">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Mailing City</label>
+                            <input type="text" id="mailing-city" placeholder="City">
+                        </div>
+                        <div class="form-group">
+                            <label>Mailing State</label>
+                            <input type="text" id="mailing-state" value="CA">
+                        </div>
+                        <div class="form-group">
+                            <label>Mailing ZIP</label>
+                            <input type="text" id="mailing-zip" placeholder="ZIP">
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn" onclick="saveInformation()">Save Information</button>
+                <span id="save-status" style="margin-left: 15px; color: #22c55e; display: none;">✓ Information saved!</span>
+            </div>
+            
+            <!-- Step 3: Generate Documents -->
+            <div id="generate" class="tab-content">
+                <h2>Generate Documents</h2>
+                <p>Select which documents to generate based on the information provided.</p>
+                
+                <div class="info-section">
+                    <h3>Available Documents</h3>
+                    
+                    <div style="margin-bottom: 30px;">
+                        <h4 style="margin-bottom: 10px;">Trust Transfer Deed</h4>
+                        <p class="help-text">Transfers property from individual names to trust</p>
+                        <button class="btn" onclick="generateTrustDeed()">Generate Trust Transfer Deed</button>
+                    </div>
+                    
+                    <div style="margin-bottom: 30px;">
+                        <h4 style="margin-bottom: 10px;">PCOR Form</h4>
+                        <p class="help-text">Preliminary Change of Ownership Report for county assessor</p>
+                        <div class="form-group" style="max-width: 300px;">
+                            <label>Select County</label>
+                            <select id="pcor-county">
+                                <option value="">-- Select County --</option>
+                                <option value="los-angeles">Los Angeles</option>
+                                <option value="orange">Orange</option>
+                                <option value="san-bernardino">San Bernardino</option>
+                                <option value="riverside">Riverside</option>
+                                <option value="ventura">Ventura</option>
+                            </select>
+                        </div>
+                        <button class="btn" onclick="generatePCOR()">Generate PCOR Form</button>
+                    </div>
+                </div>
+                
+                <div class="success-message" id="generate-success">
+                    ✓ Document generated successfully! Download should start automatically.
+                </div>
+                
+                <div class="error-message" id="generate-error">
+                    ✗ Error generating document. Please check all required fields are filled.
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        document.getElementById('principalResidence').addEventListener('change', function() {
-            const occupancyGroup = document.getElementById('occupancyDateGroup');
-            occupancyGroup.style.display = this.checked ? 'block' : 'none';
-        });
-
-        document.getElementById('propertyType').addEventListener('change', function() {
-            const unitsGroup = document.getElementById('unitsGroup');
-            unitsGroup.style.display = this.value === 'multi-family' ? 'block' : 'none';
-        });
-
-        document.getElementById('pcorForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
+        let extractedDeedData = {};
+        let documentData = {};
+        
+        function switchTab(tabName, element) {
+            // Update tabs
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
-            const county = document.getElementById('county').value;
+            element.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+        
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('dragover');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleDeedUpload({ target: { files: files } });
+            }
+        }
+        
+        async function handleDeedUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Show file name
+            document.getElementById('uploaded-file-name').textContent = file.name;
+            document.getElementById('deed-upload-area').classList.add('has-file');
+            
+            // Show loading
+            document.getElementById('ocr-loading').style.display = 'block';
+            document.getElementById('upload-success').style.display = 'none';
+            document.getElementById('upload-error').style.display = 'none';
+            
+            const formData = new FormData();
+            formData.append('deed', file);
+            
+            try {
+                const response = await fetch('/.netlify/functions/ocr-deed', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                extractedDeedData = data;
+                
+                // Populate fields with extracted data
+                populateFields(data);
+                
+                document.getElementById('ocr-loading').style.display = 'none';
+                document.getElementById('upload-success').style.display = 'block';
+                
+                // Auto-switch to next tab
+                setTimeout(() => {
+                    document.querySelector('.tab:nth-child(2)').click();
+                }, 1500);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('ocr-loading').style.display = 'none';
+                document.getElementById('upload-error').style.display = 'block';
+                
+                // Still allow manual entry
+                setTimeout(() => {
+                    document.querySelector('.tab:nth-child(2)').click();
+                }, 2000);
+            }
+        }
+        
+        function populateFields(data) {
+            // Populate grantor fields (from original deed's grantee)
+            if (data.grantee) {
+                document.getElementById('grantor1-name').value = data.grantor1 || data.grantee;
+                document.getElementById('grantor1-status').textContent = 'Extracted';
+                document.getElementById('grantor1-status').className = 'field-status extracted';
+                
+                if (data.grantor2) {
+                    document.getElementById('grantor2-name').value = data.grantor2;
+                    document.getElementById('grantor2-status').textContent = 'Extracted';
+                    document.getElementById('grantor2-status').className = 'field-status extracted';
+                }
+            }
+            
+            // Populate property fields
+            if (data.propertyAddress) {
+                document.getElementById('property-address').value = data.propertyAddress;
+                document.getElementById('property-status').textContent = 'Extracted';
+                document.getElementById('property-status').className = 'field-status extracted';
+                
+                // Try to parse city and zip
+                const parts = data.propertyAddress.split(',');
+                if (parts.length > 1) {
+                    document.getElementById('property-city').value = parts[1].trim();
+                    const zipMatch = parts[parts.length - 1].match(/\d{5}/);
+                    if (zipMatch) {
+                        document.getElementById('property-zip').value = zipMatch[0];
+                    }
+                }
+            }
+            
+            if (data.apn) {
+                document.getElementById('apn').value = data.apn;
+                document.getElementById('apn-status').textContent = 'Extracted';
+                document.getElementById('apn-status').className = 'field-status extracted';
+            }
+            
+            if (data.legalDescription) {
+                document.getElementById('legal-description').value = data.legalDescription;
+                document.getElementById('legal-status').textContent = 'Extracted';
+                document.getElementById('legal-status').className = 'field-status extracted';
+            }
+            
+            // Set default trust date to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('trust-date').value = today;
+            
+            // Auto-generate trust name if both grantors exist
+            if (data.grantor1 && data.grantor2) {
+                const lastName1 = data.grantor1.split(' ').pop();
+                const lastName2 = data.grantor2.split(' ').pop();
+                const trustName = lastName1 === lastName2 ? 
+                    `${lastName1.toUpperCase()} FAMILY LIVING TRUST` :
+                    `${data.grantor1} AND ${data.grantor2} LIVING TRUST`;
+                document.getElementById('trust-name').value = trustName;
+            }
+        }
+        
+        function saveInformation() {
+            // Collect all form data
+            documentData = {
+                // Trust info
+                trustName: document.getElementById('trust-name').value,
+                trustDate: document.getElementById('trust-date').value,
+                trustType: document.getElementById('trust-type').value,
+                
+                // Grantor info
+                grantor1Name: document.getElementById('grantor1-name').value,
+                grantor2Name: document.getElementById('grantor2-name').value,
+                ownershipType: document.getElementById('ownership-type').value,
+                
+                // Property info
+                propertyAddress: document.getElementById('property-address').value,
+                propertyCity: document.getElementById('property-city').value,
+                propertyZip: document.getElementById('property-zip').value,
+                apn: document.getElementById('apn').value,
+                legalDescription: document.getElementById('legal-description').value,
+                
+                // Mailing info
+                mailingAddress: document.getElementById('mailing-address').value || document.getElementById('property-address').value,
+                mailingCity: document.getElementById('mailing-city').value || document.getElementById('property-city').value,
+                mailingState: document.getElementById('mailing-state').value,
+                mailingZip: document.getElementById('mailing-zip').value || document.getElementById('property-zip').value,
+                
+                // Combined for convenience
+                buyerName: document.getElementById('grantor1-name').value,
+                buyerAddress: document.getElementById('mailing-address').value || document.getElementById('property-address').value,
+                buyerCity: document.getElementById('mailing-city').value || document.getElementById('property-city').value,
+                buyerState: document.getElementById('mailing-state').value,
+                buyerZip: document.getElementById('mailing-zip').value || document.getElementById('property-zip').value,
+                sellerName: extractedDeedData.originalGrantor || '',
+                
+                // For PCOR
+                transferDate: new Date().toISOString().split('T')[0],
+                principalResidence: 'yes',
+                disabledVeteran: 'no',
+            };
+            
+            // Show save confirmation
+            document.getElementById('save-status').style.display = 'inline';
+            setTimeout(() => {
+                document.getElementById('save-status').style.display = 'none';
+            }, 3000);
+            
+            console.log('Saved data:', documentData);
+        }
+        
+        async function generateTrustDeed() {
+            // Save current form data first
+            saveInformation();
+            
+            document.getElementById('generate-success').style.display = 'none';
+            document.getElementById('generate-error').style.display = 'none';
+            
+            try {
+                const response = await fetch('/.netlify/functions/generate-trust-deed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(documentData)
+                });
+                
+                const data = await response.json();
+                if (data.pdfUrl) {
+                    document.getElementById('generate-success').style.display = 'block';
+                    const link = document.createElement('a');
+                    link.href = data.pdfUrl;
+                    link.download = `trust-transfer-deed-${documentData.apn || 'document'}.pdf`;
+                    link.click();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('generate-error').style.display = 'block';
+            }
+        }
+        
+        async function generatePCOR() {
+            const county = document.getElementById('pcor-county').value;
             if (!county) {
                 alert('Please select a county');
                 return;
             }
-
-            document.getElementById('loading').classList.add('active');
-            document.getElementById('results').classList.remove('active');
-            document.getElementById('error').style.display = 'none';
-
-            const formData = new FormData(this);
-            const data = Object.fromEntries(formData.entries());
             
-            data.county = county;
+            // Save current form data first
+            saveInformation();
             
-            data.exclusions = [];
-            document.querySelectorAll('input[name="exclusions"]:checked').forEach(cb => {
-                data.exclusions.push(cb.value);
-            });
-
+            document.getElementById('generate-success').style.display = 'none';
+            document.getElementById('generate-error').style.display = 'none';
+            
             try {
                 const response = await fetch('/.netlify/functions/generate-pcor', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...documentData,
+                        county: county,
+                        buyerPhone: '(   )    -    ', // Add phone field if needed
+                        buyerEmail: documentData.buyerEmail || ''
+                    })
                 });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    const downloadLinks = document.getElementById('downloadLinks');
-                    downloadLinks.innerHTML = '<a href="' + result.pdfUrl + '" download="PCOR_' + county + '_' + Date.now() + '.pdf" class="pdf-link">Download PCOR Form</a>';
-                    
-                    document.getElementById('results').classList.add('active');
-                } else {
-                    throw new Error(result.error || 'Failed to generate form');
+                
+                const data = await response.json();
+                if (data.pdfUrl) {
+                    document.getElementById('generate-success').style.display = 'block';
+                    const link = document.createElement('a');
+                    link.href = data.pdfUrl;
+                    link.download = `pcor-${county}-${documentData.apn || 'form'}.pdf`;
+                    link.click();
                 }
             } catch (error) {
-                document.getElementById('error').textContent = 'Error: ' + error.message;
-                document.getElementById('error').style.display = 'block';
-            } finally {
-                document.getElementById('loading').classList.remove('active');
-            }
-        });
-
-        function clearForm() {
-            if (confirm('Are you sure you want to clear all form data?')) {
-                document.getElementById('pcorForm').reset();
-                document.getElementById('results').classList.remove('active');
-                document.getElementById('error').style.display = 'none';
+                console.error('Error:', error);
+                document.getElementById('generate-error').style.display = 'block';
             }
         }
+        
+        // Mark manually edited fields
+        document.querySelectorAll('input, textarea').forEach(field => {
+            field.addEventListener('input', function() {
+                const statusElement = document.querySelector(`#${this.id}-status`);
+                if (statusElement && !statusElement.classList.contains('extracted')) {
+                    statusElement.textContent = 'Manual';
+                    statusElement.className = 'field-status manual';
+                }
+            });
+        });
     </script>
 </body>
 </html>
