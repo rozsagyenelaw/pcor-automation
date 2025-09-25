@@ -1,223 +1,226 @@
-const { PDFDocument } = require('pdf-lib');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 const fs = require('fs').promises;
 const path = require('path');
 
-async function extractFields(filename) {
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`Extracting fields from: ${filename}`);
-  console.log('='.repeat(60));
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const year = date.getFullYear().toString();
+  return { month, day, year, full: month + '/' + day + '/' + year };
+}
+
+function formatCurrency(value) {
+  if (!value) return "";
+  const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+  return num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+async function loadPDFTemplate(county) {
+  const fetch = (await import('node-fetch')).default;
+  
+  const templateMap = {
+    'los-angeles': 'preliminary-change-of-ownership__1_.pdf',
+    'ventura': 'VENTURA_County_Form_BOE-502-A_for_2022__14_.pdf',
+    'orange': 'ORANGE_County_Form_BOE-502-A_for_2021__18_.pdf',
+    'san-bernardino': 'SAN_BERNARDINO_County_Form_BOE-502-A_for_2025__23_.pdf',
+    'riverside': 'RIVERSIDE_County_Form_BOE-502-A_for_2018__6_.pdf'
+  };
+  
+  const templateFile = templateMap[county];
+  if (!templateFile) {
+    throw new Error('Unknown county: ' + county);
+  }
+  
+  const url = 'https://pcor-automation.netlify.app/templates/' + templateFile;
   
   try {
-    const pdfPath = path.join('templates', filename);
-    const pdfBytes = await fs.readFile(pdfPath);
+    console.log('Loading template for ' + county + ' from: ' + url);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Failed to load template: ' + response.statusText);
+    }
+    const buffer = await response.buffer();
+    return buffer;
+  } catch (error) {
+    console.error('Error loading template for ' + county + ':', error);
+    throw error;
+  }
+}
+
+async function fillPCORForm(data, pdfBytes, county) {
+  try {
     const pdfDoc = await PDFDocument.load(pdfBytes);
     const form = pdfDoc.getForm();
     const fields = form.getFields();
     
-    console.log(`\nTotal fields found: ${fields.length}\n`);
+    console.log('Form has ' + fields.length + ' fields available');
     
-    // Group fields by type
-    const textFields = [];
-    const checkBoxes = [];
-    const radioGroups = [];
-    const dropdowns = [];
-    const others = [];
+    const dateInfo = formatDate(data.transferDate);
     
-    fields.forEach((field, index) => {
-      const name = field.getName();
-      const type = field.constructor.name;
-      
-      const fieldInfo = {
-        index: index + 1,
-        name: name,
-        type: type
-      };
-      
-      switch(type) {
-        case 'PDFTextField':
-          textFields.push(fieldInfo);
-          break;
-        case 'PDFCheckBox':
-          checkBoxes.push(fieldInfo);
-          break;
-        case 'PDFRadioGroup':
-          radioGroups.push(fieldInfo);
-          break;
-        case 'PDFDropdown':
-          dropdowns.push(fieldInfo);
-          break;
-        default:
-          others.push(fieldInfo);
-      }
-    });
-    
-    // Print organized output
-    if (textFields.length > 0) {
-      console.log('TEXT FIELDS:');
-      console.log('-'.repeat(50));
-      textFields.forEach(f => {
-        console.log(`  ${f.index}. ${f.name}`);
-      });
-      console.log();
-    }
-    
-    if (checkBoxes.length > 0) {
-      console.log('CHECKBOXES:');
-      console.log('-'.repeat(50));
-      checkBoxes.forEach(f => {
-        console.log(`  ${f.index}. ${f.name}`);
-      });
-      console.log();
-    }
-    
-    if (radioGroups.length > 0) {
-      console.log('RADIO GROUPS:');
-      console.log('-'.repeat(50));
-      radioGroups.forEach(f => {
-        console.log(`  ${f.index}. ${f.name}`);
-      });
-      console.log();
-    }
-    
-    if (dropdowns.length > 0) {
-      console.log('DROPDOWNS:');
-      console.log('-'.repeat(50));
-      dropdowns.forEach(f => {
-        console.log(`  ${f.index}. ${f.name}`);
-      });
-      console.log();
-    }
-    
-    if (others.length > 0) {
-      console.log('OTHER FIELDS:');
-      console.log('-'.repeat(50));
-      others.forEach(f => {
-        console.log(`  ${f.index}. ${f.name} (${f.type})`);
-      });
-      console.log();
-    }
-    
-    // Save detailed field mappings to JSON
-    const fieldMap = {
-      filename: filename,
-      totalFields: fields.length,
-      extractedAt: new Date().toISOString(),
-      fields: {
-        text: textFields,
-        checkboxes: checkBoxes,
-        radioGroups: radioGroups,
-        dropdowns: dropdowns,
-        others: others
-      },
-      allFields: fields.map((field, index) => ({
-        index: index + 1,
-        name: field.getName(),
-        type: field.constructor.name
-      }))
+    const fieldMappings = {
+      'BUYER\'S DAYTIME TELEPHONE NUMBER': data.buyerPhone,
+      'BUYER\'S EMAIL ADDRESS': data.buyerEmail,
+      'STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY': data.propertyAddress,
+      'CITY': data.propertyCity,
+      'STATE': 'CA',
+      'ZIP CODE': data.propertyZip,
+      'ASSESSOR\'S PARCEL NUMBER': data.apn,
+      'SELLER/TRANSFEROR': data.sellerName,
+      'MAIL PROPERTY TAX INFORMATION TO (NAME)': data.buyerName,
+      'MAIL PROPERTY TAX INFORMATION TO (ADDRESS)': data.buyerAddress,
+      'A. Total purchase price': formatCurrency(data.purchasePrice),
+      'B. Cash down payment or value of trade or exchange excluding closing costs': formatCurrency(data.downPayment),
+      'C. First deed of trust': formatCurrency(data.firstLoan),
+      'D. Second deed of trust': formatCurrency(data.secondLoan),
+      'MO': dateInfo.month,
+      'DAY': dateInfo.day,
+      'YEAR': dateInfo.year,
     };
     
-    const outputFilename = filename.replace('.pdf', '_fields.json');
-    const outputPath = path.join('templates', outputFilename);
-    await fs.writeFile(outputPath, JSON.stringify(fieldMap, null, 2));
+    for (const [fieldPattern, value] of Object.entries(fieldMappings)) {
+      if (value) {
+        try {
+          const field = form.getTextField(fieldPattern);
+          field.setText(value.toString());
+          console.log('Set field "' + fieldPattern + '" to "' + value + '"');
+        } catch (e) {
+          fields.forEach(field => {
+            const fieldName = field.getName();
+            if (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName)) {
+              try {
+                const textField = form.getTextField(fieldName);
+                textField.setText(value.toString());
+                console.log('Set field "' + fieldName + '" to "' + value + '" (pattern match)');
+              } catch (e2) {
+                // Field might not be a text field
+              }
+            }
+          });
+        }
+      }
+    }
     
-    console.log(`\n✓ Field mappings saved to: ${outputFilename}`);
+    const checkboxMappings = {
+      'This property is intended as my principal residence': data.principalResidence === 'on',
+      'This transfer is solely between spouses': data.exclusions && data.exclusions.includes('spouses'),
+      'between parent(s) and child(ren)': data.exclusions && data.exclusions.includes('parentChild'),
+      'from grandparent(s) to grandchild(ren)': data.exclusions && data.exclusions.includes('grandparentGrandchild'),
+      'This transfer is the result of a cotenant\'s death': data.exclusions && data.exclusions.includes('cotenant'),
+      'This transaction is to replace a principal residence owned by a person 55 years of age or older': data.exclusions && data.exclusions.includes('over55'),
+      'This transaction is to replace a principal residence by a person who is severely disabled': data.exclusions && data.exclusions.includes('disabled'),
+      'Purchase': data.transferType === 'purchase',
+      'Gift': data.transferType === 'gift',
+      'Inheritance': data.transferType === 'inheritance',
+      'Foreclosure': data.transferType === 'foreclosure',
+      'Trade or exchange': data.transferType === 'trade',
+      'Single-family residence': data.propertyType === 'single-family',
+      'Multiple-family residence': data.propertyType === 'multi-family',
+      'Commercial/Industrial': data.propertyType === 'commercial',
+      'Condominium': data.propertyType === 'condominium',
+      'Co-op/Own-your-own': data.propertyType === 'co-op',
+      'Manufactured home': data.propertyType === 'manufactured',
+      'Unimproved lot': data.propertyType === 'unimproved',
+      'Timeshare': data.propertyType === 'timeshare',
+    };
     
-    // Also create a simplified mapping file for common fields
-    const simplifiedMap = createSimplifiedMapping(fields, filename);
-    const simplifiedFilename = filename.replace('.pdf', '_mapping.json');
-    const simplifiedPath = path.join('templates', simplifiedFilename);
-    await fs.writeFile(simplifiedPath, JSON.stringify(simplifiedMap, null, 2));
+    for (const [fieldPattern, shouldCheck] of Object.entries(checkboxMappings)) {
+      if (shouldCheck !== undefined) {
+        try {
+          const checkbox = form.getCheckBox(fieldPattern);
+          if (shouldCheck) {
+            checkbox.check();
+          } else {
+            checkbox.uncheck();
+          }
+          console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldPattern + '"');
+        } catch (e) {
+          fields.forEach(field => {
+            const fieldName = field.getName();
+            if (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName)) {
+              try {
+                const checkbox = form.getCheckBox(fieldName);
+                if (shouldCheck) {
+                  checkbox.check();
+                } else {
+                  checkbox.uncheck();
+                }
+                console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldName + '" (pattern match)');
+              } catch (e2) {
+                // Field might not be a checkbox
+              }
+            }
+          });
+        }
+      }
+    }
     
-    console.log(`✓ Simplified mappings saved to: ${simplifiedFilename}`);
+    const pdfBytesResult = await pdfDoc.save();
+    return pdfBytesResult;
     
   } catch (error) {
-    console.error(`\n✗ Error processing ${filename}:`, error.message);
+    console.error('Error filling PCOR form:', error);
+    throw error;
   }
 }
 
-function createSimplifiedMapping(fields, filename) {
-  // Try to identify common PCOR fields
-  const mapping = {
-    county: filename.split('_')[0].toLowerCase(),
-    mappedFields: {},
-    unmappedFields: []
+exports.handler = async (event, context) => {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
   };
   
-  fields.forEach(field => {
-    const name = field.getName();
-    const lowerName = name.toLowerCase();
-    
-    // Try to identify common fields by patterns
-    if (lowerName.includes('buyer') && lowerName.includes('name')) {
-      mapping.mappedFields.buyerName = name;
-    } else if (lowerName.includes('buyer') && lowerName.includes('address')) {
-      mapping.mappedFields.buyerAddress = name;
-    } else if (lowerName.includes('buyer') && lowerName.includes('phone')) {
-      mapping.mappedFields.buyerPhone = name;
-    } else if (lowerName.includes('buyer') && lowerName.includes('email')) {
-      mapping.mappedFields.buyerEmail = name;
-    } else if (lowerName.includes('seller') || lowerName.includes('transferor')) {
-      mapping.mappedFields.sellerName = name;
-    } else if (lowerName.includes('apn') || lowerName.includes('parcel')) {
-      mapping.mappedFields.apn = name;
-    } else if (lowerName.includes('property') && lowerName.includes('address')) {
-      mapping.mappedFields.propertyAddress = name;
-    } else if (lowerName.includes('purchase') && lowerName.includes('price')) {
-      mapping.mappedFields.purchasePrice = name;
-    } else if (lowerName.includes('down') && lowerName.includes('payment')) {
-      mapping.mappedFields.downPayment = name;
-    } else if (lowerName.includes('principal') && lowerName.includes('residence')) {
-      mapping.mappedFields.principalResidence = name;
-    } else {
-      mapping.unmappedFields.push(name);
-    }
-  });
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers,
+      body: ''
+    };
+  }
   
-  return mapping;
-}
-
-async function main() {
-  console.log('\nPCOR FIELD EXTRACTION TOOL');
-  console.log('==========================\n');
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
+  }
   
-  // Check if templates directory exists
   try {
-    await fs.access('templates');
-  } catch {
-    console.log('Creating templates directory...');
-    await fs.mkdir('templates', { recursive: true });
+    const data = JSON.parse(event.body);
+    console.log('Received PCOR data for county:', data.county);
+    console.log('Form data:', data);
+    
+    const pdfBytes = await loadPDFTemplate(data.county);
+    console.log('PDF template loaded successfully');
+    
+    const filledPdfBytes = await fillPCORForm(data, pdfBytes, data.county);
+    console.log('PDF form filled successfully');
+    
+    const base64 = Buffer.from(filledPdfBytes).toString('base64');
+    const dataUrl = 'data:application/pdf;base64,' + base64;
+    
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        success: true,
+        pdfUrl: dataUrl,
+        message: 'PCOR form for ' + data.county + ' generated successfully'
+      })
+    };
+  } catch (error) {
+    console.error('Error generating PCOR:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: 'Failed to generate PCOR form',
+        details: error.message
+      })
+    };
   }
-  
-  // List of PDF files to process
-  const files = [
-    'RIVERSIDE_County_Form_BOE-502-A_for_2018__6_.pdf',
-    'SAN_BERNARDINO_County_Form_BOE-502-A_for_2025__23_.pdf',
-    'VENTURA_County_Form_BOE-502-A_for_2022__14_.pdf',
-    'ORANGE_County_Form_BOE-502-A_for_2021__18_.pdf',
-    'preliminary-change-of-ownership__1_.pdf'
-  ];
-  
-  let processedCount = 0;
-  
-  for (const file of files) {
-    try {
-      await fs.access(path.join('templates', file));
-      await extractFields(file);
-      processedCount++;
-    } catch {
-      console.log(`\n⚠ Skipping ${file} - File not found in templates/`);
-    }
-  }
-  
-  console.log('\n' + '='.repeat(60));
-  console.log(`EXTRACTION COMPLETE: ${processedCount} files processed`);
-  console.log('='.repeat(60) + '\n');
-  
-  if (processedCount === 0) {
-    console.log('⚠ No PDF files found in templates directory.');
-    console.log('  Please add the PCOR PDF files to the templates/ folder and run again.\n');
-  }
-}
-
-// Run the extraction
-main().catch(console.error);
+};
