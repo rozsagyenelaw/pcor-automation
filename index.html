@@ -296,11 +296,11 @@
                     <div class="form-group">
                         <label>Ownership Type</label>
                         <select id="ownership-type">
-                            <option value="husband-wife-joint">Husband and Wife as Joint Tenants</option>
-                            <option value="joint-tenants">As Joint Tenants</option>
-                            <option value="community-property">As Community Property</option>
-                            <option value="tenants-common">As Tenants in Common</option>
-                            <option value="single">A Single Person</option>
+                            <option value="HUSBAND AND WIFE AS JOINT TENANTS">Husband and Wife as Joint Tenants</option>
+                            <option value="AS JOINT TENANTS">As Joint Tenants</option>
+                            <option value="AS COMMUNITY PROPERTY">As Community Property</option>
+                            <option value="AS TENANTS IN COMMON">As Tenants in Common</option>
+                            <option value="A SINGLE PERSON">A Single Person</option>
                         </select>
                     </div>
                 </div>
@@ -447,53 +447,73 @@
             document.getElementById('upload-success').style.display = 'none';
             document.getElementById('upload-error').style.display = 'none';
             
-            const formData = new FormData();
-            formData.append('deed', file);
+            // Convert file to base64
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64 = e.target.result.split(',')[1]; // Remove data:application/pdf;base64, prefix
+                
+                try {
+                    const response = await fetch('/.netlify/functions/ocr-deed', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            deed: base64 
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    console.log('Extracted data:', data);
+                    
+                    if (data.success && data.extractedInfo) {
+                        extractedDeedData = data.extractedInfo;
+                        populateFields(data.extractedInfo);
+                        
+                        document.getElementById('ocr-loading').style.display = 'none';
+                        document.getElementById('upload-success').style.display = 'block';
+                        
+                        // Auto-switch to next tab
+                        setTimeout(() => {
+                            document.querySelector('.tab:nth-child(2)').click();
+                        }, 1500);
+                    } else {
+                        throw new Error(data.error || 'Extraction failed');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error:', error);
+                    document.getElementById('ocr-loading').style.display = 'none';
+                    document.getElementById('upload-error').style.display = 'block';
+                    
+                    // Still allow manual entry
+                    setTimeout(() => {
+                        document.querySelector('.tab:nth-child(2)').click();
+                    }, 2000);
+                }
+            };
             
-            try {
-                const response = await fetch('/.netlify/functions/ocr-deed', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                extractedDeedData = data;
-                
-                // Populate fields with extracted data
-                populateFields(data);
-                
-                document.getElementById('ocr-loading').style.display = 'none';
-                document.getElementById('upload-success').style.display = 'block';
-                
-                // Auto-switch to next tab
-                setTimeout(() => {
-                    document.querySelector('.tab:nth-child(2)').click();
-                }, 1500);
-                
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('ocr-loading').style.display = 'none';
-                document.getElementById('upload-error').style.display = 'block';
-                
-                // Still allow manual entry
-                setTimeout(() => {
-                    document.querySelector('.tab:nth-child(2)').click();
-                }, 2000);
-            }
+            reader.readAsDataURL(file);
         }
         
         function populateFields(data) {
+            console.log('Populating fields with:', data);
+            
             // Populate grantor fields (from original deed's grantee)
-            if (data.grantee) {
-                document.getElementById('grantor1-name').value = data.grantor1 || data.grantee;
+            if (data.grantor1) {
+                document.getElementById('grantor1-name').value = data.grantor1;
                 document.getElementById('grantor1-status').textContent = 'Extracted';
                 document.getElementById('grantor1-status').className = 'field-status extracted';
-                
-                if (data.grantor2) {
-                    document.getElementById('grantor2-name').value = data.grantor2;
-                    document.getElementById('grantor2-status').textContent = 'Extracted';
-                    document.getElementById('grantor2-status').className = 'field-status extracted';
-                }
+            } else if (data.grantee) {
+                document.getElementById('grantor1-name').value = data.grantee;
+                document.getElementById('grantor1-status').textContent = 'Extracted';
+                document.getElementById('grantor1-status').className = 'field-status extracted';
+            }
+            
+            if (data.grantor2) {
+                document.getElementById('grantor2-name').value = data.grantor2;
+                document.getElementById('grantor2-status').textContent = 'Extracted';
+                document.getElementById('grantor2-status').className = 'field-status extracted';
             }
             
             // Populate property fields
@@ -501,16 +521,14 @@
                 document.getElementById('property-address').value = data.propertyAddress;
                 document.getElementById('property-status').textContent = 'Extracted';
                 document.getElementById('property-status').className = 'field-status extracted';
-                
-                // Try to parse city and zip
-                const parts = data.propertyAddress.split(',');
-                if (parts.length > 1) {
-                    document.getElementById('property-city').value = parts[1].trim();
-                    const zipMatch = parts[parts.length - 1].match(/\d{5}/);
-                    if (zipMatch) {
-                        document.getElementById('property-zip').value = zipMatch[0];
-                    }
-                }
+            }
+            
+            if (data.propertyCity) {
+                document.getElementById('property-city').value = data.propertyCity;
+            }
+            
+            if (data.propertyZip) {
+                document.getElementById('property-zip').value = data.propertyZip;
             }
             
             if (data.apn) {
@@ -530,12 +548,17 @@
             document.getElementById('trust-date').value = today;
             
             // Auto-generate trust name if both grantors exist
-            if (data.grantor1 && data.grantor2) {
-                const lastName1 = data.grantor1.split(' ').pop();
-                const lastName2 = data.grantor2.split(' ').pop();
-                const trustName = lastName1 === lastName2 ? 
-                    `${lastName1.toUpperCase()} FAMILY LIVING TRUST` :
-                    `${data.grantor1} AND ${data.grantor2} LIVING TRUST`;
+            if (data.grantor1) {
+                let trustName = '';
+                if (data.grantor2) {
+                    const lastName1 = data.grantor1.split(' ').pop();
+                    const lastName2 = data.grantor2.split(' ').pop();
+                    trustName = lastName1 === lastName2 ? 
+                        `${lastName1.toUpperCase()} FAMILY LIVING TRUST` :
+                        `${data.grantor1.toUpperCase()} AND ${data.grantor2.toUpperCase()} LIVING TRUST`;
+                } else {
+                    trustName = `${data.grantor1.toUpperCase()} LIVING TRUST`;
+                }
                 document.getElementById('trust-name').value = trustName;
             }
         }
@@ -556,6 +579,7 @@
                 // Property info
                 propertyAddress: document.getElementById('property-address').value,
                 propertyCity: document.getElementById('property-city').value,
+                propertyState: 'CA',
                 propertyZip: document.getElementById('property-zip').value,
                 apn: document.getElementById('apn').value,
                 legalDescription: document.getElementById('legal-description').value,
@@ -566,13 +590,13 @@
                 mailingState: document.getElementById('mailing-state').value,
                 mailingZip: document.getElementById('mailing-zip').value || document.getElementById('property-zip').value,
                 
-                // Combined for convenience
+                // Combined for convenience (for PCOR)
                 buyerName: document.getElementById('grantor1-name').value,
                 buyerAddress: document.getElementById('mailing-address').value || document.getElementById('property-address').value,
                 buyerCity: document.getElementById('mailing-city').value || document.getElementById('property-city').value,
                 buyerState: document.getElementById('mailing-state').value,
                 buyerZip: document.getElementById('mailing-zip').value || document.getElementById('property-zip').value,
-                sellerName: extractedDeedData.originalGrantor || '',
+                sellerName: extractedDeedData.originalGrantor || document.getElementById('grantor1-name').value,
                 
                 // For PCOR
                 transferDate: new Date().toISOString().split('T')[0],
@@ -604,12 +628,16 @@
                 });
                 
                 const data = await response.json();
-                if (data.pdfUrl) {
+                console.log('Trust deed response:', data);
+                
+                if (data.success && data.pdfUrl) {
                     document.getElementById('generate-success').style.display = 'block';
                     const link = document.createElement('a');
                     link.href = data.pdfUrl;
                     link.download = `trust-transfer-deed-${documentData.apn || 'document'}.pdf`;
                     link.click();
+                } else {
+                    throw new Error(data.error || 'Failed to generate');
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -637,18 +665,22 @@
                     body: JSON.stringify({
                         ...documentData,
                         county: county,
-                        buyerPhone: '(   )    -    ', // Add phone field if needed
-                        buyerEmail: documentData.buyerEmail || ''
+                        buyerPhone: '(   )    -    ',
+                        buyerEmail: ''
                     })
                 });
                 
                 const data = await response.json();
-                if (data.pdfUrl) {
+                console.log('PCOR response:', data);
+                
+                if (data.success && data.pdfUrl) {
                     document.getElementById('generate-success').style.display = 'block';
                     const link = document.createElement('a');
                     link.href = data.pdfUrl;
                     link.download = `pcor-${county}-${documentData.apn || 'form'}.pdf`;
                     link.click();
+                } else {
+                    throw new Error(data.error || 'Failed to generate');
                 }
             } catch (error) {
                 console.error('Error:', error);
