@@ -1,10 +1,12 @@
 {
   "name": "pcor-automation",
-  "version": "1.0.0",
-  "description": "California PCOR Form Automation System",
+  "version": "2.0.0",
+  "description": "California PCOR Form and Trust Transfer Deed Automation System",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "echo \"Build complete\"",
+    "start": "netlify dev"
   },
   "repository": {
     "type": "git",
@@ -15,12 +17,21 @@
     "california",
     "real-estate",
     "forms",
-    "automation"
+    "automation",
+    "trust-transfer",
+    "deed",
+    "ocr",
+    "pdf"
   ],
   "author": "Rozsa Gyene",
   "license": "MIT",
   "dependencies": {
     "pdf-lib": "^1.17.1",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^4.0.2"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
   }
 }
