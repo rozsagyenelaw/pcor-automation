@@ -1,5 +1,5 @@
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 
 function formatDate(dateString) {
@@ -18,8 +18,7 @@ function formatCurrency(value) {
 }
 
 async function loadPDFTemplate(county) {
-  const fetch = (await import('node-fetch')).default;
-  
+  // Map county names to actual file names in your repository
   const templateMap = {
     'los-angeles': 'preliminary-change-of-ownership (1).pdf',
     'ventura': 'VENTURA County Form BOE-502-A for 2022 (14).pdf',
@@ -33,15 +32,27 @@ async function loadPDFTemplate(county) {
     throw new Error('Unknown county: ' + county);
   }
   
-  const url = 'https://melodic-capybara-d4f2c8.netlify.app/templates/' + encodeURIComponent(templateFile);
+  // Read the file from the local file system
+  // The path is relative to the function file location
+  const templatePath = path.join(__dirname, '..', '..', 'templates', templateFile);
   
   try {
-    console.log('Loading template for ' + county + ' from: ' + url);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('Failed to load template: ' + response.statusText);
+    console.log('Loading template for ' + county + ' from: ' + templatePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(templatePath)) {
+      console.error('Template file not found at: ' + templatePath);
+      // List files in the templates directory for debugging
+      const templatesDir = path.join(__dirname, '..', '..', 'templates');
+      if (fs.existsSync(templatesDir)) {
+        const files = fs.readdirSync(templatesDir);
+        console.log('Available files in templates directory:', files);
+      }
+      throw new Error('Template file not found: ' + templateFile);
     }
-    const buffer = await response.buffer();
+    
+    const buffer = fs.readFileSync(templatePath);
+    console.log('Successfully loaded template: ' + templateFile + ' (' + buffer.length + ' bytes)');
     return buffer;
   } catch (error) {
     console.error('Error loading template for ' + county + ':', error);
@@ -57,104 +68,151 @@ async function fillPCORForm(data, pdfBytes, county) {
     
     console.log('Form has ' + fields.length + ' fields available');
     
+    // Log all field names for debugging
+    console.log('Available fields:');
+    fields.forEach(field => {
+      console.log('  - ' + field.getName() + ' (' + field.constructor.name + ')');
+    });
+    
     const dateInfo = formatDate(data.transferDate);
     
-    const fieldMappings = {
-      'BUYER\'S DAYTIME TELEPHONE NUMBER': data.buyerPhone,
-      'BUYER\'S EMAIL ADDRESS': data.buyerEmail,
-      'STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY': data.propertyAddress,
-      'CITY': data.propertyCity,
-      'STATE': 'CA',
-      'ZIP CODE': data.propertyZip,
-      'ASSESSOR\'S PARCEL NUMBER': data.apn,
-      'SELLER/TRANSFEROR': data.sellerName,
-      'MAIL PROPERTY TAX INFORMATION TO (NAME)': data.buyerName,
-      'MAIL PROPERTY TAX INFORMATION TO (ADDRESS)': data.buyerAddress,
-      'A. Total purchase price': formatCurrency(data.purchasePrice),
-      'B. Cash down payment or value of trade or exchange excluding closing costs': formatCurrency(data.downPayment),
-      'C. First deed of trust': formatCurrency(data.firstLoan),
-      'D. Second deed of trust': formatCurrency(data.secondLoan),
-      'MO': dateInfo.month,
-      'DAY': dateInfo.day,
-      'YEAR': dateInfo.year,
-    };
-    
-    for (const [fieldPattern, value] of Object.entries(fieldMappings)) {
-      if (value) {
+    // Helper function to set text field value with fallback
+    const setTextField = (fieldNames, value) => {
+      if (!value) return;
+      
+      // fieldNames can be a string or array of strings
+      const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+      
+      for (const fieldName of names) {
         try {
-          const field = form.getTextField(fieldPattern);
+          const field = form.getTextField(fieldName);
           field.setText(value.toString());
-          console.log('Set field "' + fieldPattern + '" to "' + value + '"');
+          console.log('Set field "' + fieldName + '" to "' + value + '"');
+          return; // Success, stop trying other names
         } catch (e) {
-          fields.forEach(field => {
-            const fieldName = field.getName();
-            if (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName)) {
-              try {
-                const textField = form.getTextField(fieldName);
-                textField.setText(value.toString());
-                console.log('Set field "' + fieldName + '" to "' + value + '" (pattern match)');
-              } catch (e2) {
-                // Field might not be a text field
-              }
-            }
+          // Try partial match
+          const found = fields.find(f => {
+            const name = f.getName();
+            return name && (
+              name.toLowerCase().includes(fieldName.toLowerCase()) ||
+              fieldName.toLowerCase().includes(name.toLowerCase())
+            );
           });
+          
+          if (found && found.constructor.name === 'PDFTextField') {
+            try {
+              const textField = form.getTextField(found.getName());
+              textField.setText(value.toString());
+              console.log('Set field "' + found.getName() + '" to "' + value + '" (partial match)');
+              return;
+            } catch (e2) {
+              // Continue to next field name
+            }
+          }
         }
       }
-    }
-    
-    const checkboxMappings = {
-      'This property is intended as my principal residence': data.principalResidence === 'on',
-      'This transfer is solely between spouses': data.exclusions && data.exclusions.includes('spouses'),
-      'between parent(s) and child(ren)': data.exclusions && data.exclusions.includes('parentChild'),
-      'from grandparent(s) to grandchild(ren)': data.exclusions && data.exclusions.includes('grandparentGrandchild'),
-      'This transfer is the result of a cotenant\'s death': data.exclusions && data.exclusions.includes('cotenant'),
-      'This transaction is to replace a principal residence owned by a person 55 years of age or older': data.exclusions && data.exclusions.includes('over55'),
-      'This transaction is to replace a principal residence by a person who is severely disabled': data.exclusions && data.exclusions.includes('disabled'),
-      'Purchase': data.transferType === 'purchase',
-      'Gift': data.transferType === 'gift',
-      'Inheritance': data.transferType === 'inheritance',
-      'Foreclosure': data.transferType === 'foreclosure',
-      'Trade or exchange': data.transferType === 'trade',
-      'Single-family residence': data.propertyType === 'single-family',
-      'Multiple-family residence': data.propertyType === 'multi-family',
-      'Commercial/Industrial': data.propertyType === 'commercial',
-      'Condominium': data.propertyType === 'condominium',
-      'Co-op/Own-your-own': data.propertyType === 'co-op',
-      'Manufactured home': data.propertyType === 'manufactured',
-      'Unimproved lot': data.propertyType === 'unimproved',
-      'Timeshare': data.propertyType === 'timeshare',
+      console.log('Could not find field for: ' + names.join(', '));
     };
     
-    for (const [fieldPattern, shouldCheck] of Object.entries(checkboxMappings)) {
-      if (shouldCheck !== undefined) {
+    // Helper function to check/uncheck checkbox with fallback
+    const setCheckbox = (fieldNames, shouldCheck) => {
+      if (shouldCheck === undefined || shouldCheck === null) return;
+      
+      const names = Array.isArray(fieldNames) ? fieldNames : [fieldNames];
+      
+      for (const fieldName of names) {
         try {
-          const checkbox = form.getCheckBox(fieldPattern);
+          const checkbox = form.getCheckBox(fieldName);
           if (shouldCheck) {
             checkbox.check();
           } else {
             checkbox.uncheck();
           }
-          console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldPattern + '"');
+          console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldName + '"');
+          return; // Success
         } catch (e) {
-          fields.forEach(field => {
-            const fieldName = field.getName();
-            if (fieldName.includes(fieldPattern) || fieldPattern.includes(fieldName)) {
-              try {
-                const checkbox = form.getCheckBox(fieldName);
-                if (shouldCheck) {
-                  checkbox.check();
-                } else {
-                  checkbox.uncheck();
-                }
-                console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + fieldName + '" (pattern match)');
-              } catch (e2) {
-                // Field might not be a checkbox
-              }
-            }
+          // Try partial match
+          const found = fields.find(f => {
+            const name = f.getName();
+            return name && (
+              name.toLowerCase().includes(fieldName.toLowerCase()) ||
+              fieldName.toLowerCase().includes(name.toLowerCase())
+            );
           });
+          
+          if (found && found.constructor.name === 'PDFCheckBox') {
+            try {
+              const checkbox = form.getCheckBox(found.getName());
+              if (shouldCheck) {
+                checkbox.check();
+              } else {
+                checkbox.uncheck();
+              }
+              console.log((shouldCheck ? 'Checked' : 'Unchecked') + ' "' + found.getName() + '" (partial match)');
+              return;
+            } catch (e2) {
+              // Continue to next field name
+            }
+          }
         }
       }
+    };
+    
+    // Fill text fields
+    setTextField(['BUYER\'S DAYTIME TELEPHONE NUMBER', 'Buyer Phone', 'Telephone'], data.buyerPhone);
+    setTextField(['BUYER\'S EMAIL ADDRESS', 'Buyer Email', 'Email'], data.buyerEmail);
+    setTextField(['STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY', 'Property Address', 'Street Address'], data.propertyAddress);
+    setTextField(['CITY', 'City'], data.propertyCity);
+    setTextField(['STATE', 'State'], 'CA');
+    setTextField(['ZIP CODE', 'Zip', 'ZIP'], data.propertyZip);
+    setTextField(['ASSESSOR\'S PARCEL NUMBER', 'APN', 'Parcel Number'], data.apn);
+    setTextField(['SELLER/TRANSFEROR', 'Seller', 'Transferor'], data.sellerName);
+    setTextField(['BUYER/TRANSFEREE', 'Buyer', 'Transferee'], data.buyerName);
+    setTextField(['MAIL PROPERTY TAX INFORMATION TO (NAME)', 'Mail To Name'], data.buyerName);
+    setTextField(['MAIL PROPERTY TAX INFORMATION TO (ADDRESS)', 'Mail To Address'], data.buyerAddress);
+    setTextField(['Total purchase price', 'Purchase Price'], formatCurrency(data.purchasePrice));
+    setTextField(['Cash down payment', 'Down Payment'], formatCurrency(data.downPayment));
+    setTextField(['First deed of trust', 'First Loan'], formatCurrency(data.firstLoan));
+    setTextField(['Second deed of trust', 'Second Loan'], formatCurrency(data.secondLoan));
+    
+    // Set date fields
+    setTextField(['MO', 'Month'], dateInfo.month);
+    setTextField(['DAY', 'Day'], dateInfo.day);
+    setTextField(['YEAR', 'Year'], dateInfo.year);
+    
+    // Handle checkboxes for transfer type
+    if (data.transferType) {
+      setCheckbox(['Purchase'], data.transferType === 'purchase');
+      setCheckbox(['Gift'], data.transferType === 'gift');
+      setCheckbox(['Inheritance'], data.transferType === 'inheritance');
+      setCheckbox(['Foreclosure'], data.transferType === 'foreclosure');
+      setCheckbox(['Trade or exchange', 'Trade'], data.transferType === 'trade');
     }
+    
+    // Handle checkboxes for property type
+    if (data.propertyType) {
+      setCheckbox(['Single-family residence', 'Single Family'], data.propertyType === 'single-family');
+      setCheckbox(['Multiple-family residence', 'Multi Family'], data.propertyType === 'multi-family');
+      setCheckbox(['Commercial/Industrial', 'Commercial'], data.propertyType === 'commercial');
+      setCheckbox(['Condominium'], data.propertyType === 'condominium');
+      setCheckbox(['Co-op/Own-your-own', 'Co-op'], data.propertyType === 'co-op');
+      setCheckbox(['Manufactured home', 'Manufactured'], data.propertyType === 'manufactured');
+      setCheckbox(['Unimproved lot', 'Vacant Land'], data.propertyType === 'unimproved');
+      setCheckbox(['Timeshare'], data.propertyType === 'timeshare');
+    }
+    
+    // Handle exclusions
+    if (data.exclusions && Array.isArray(data.exclusions)) {
+      setCheckbox(['between spouses', 'spouses'], data.exclusions.includes('spouses'));
+      setCheckbox(['parent(s) and child(ren)', 'parent child'], data.exclusions.includes('parentChild'));
+      setCheckbox(['grandparent(s) to grandchild(ren)', 'grandparent'], data.exclusions.includes('grandparentGrandchild'));
+      setCheckbox(['cotenant\'s death', 'cotenant'], data.exclusions.includes('cotenant'));
+      setCheckbox(['person 55 years', 'over 55'], data.exclusions.includes('over55'));
+      setCheckbox(['severely disabled', 'disabled'], data.exclusions.includes('disabled'));
+    }
+    
+    // Handle principal residence checkbox
+    setCheckbox(['principal residence', 'Primary Residence'], data.principalResidence === 'on');
     
     const pdfBytesResult = await pdfDoc.save();
     return pdfBytesResult;
@@ -192,7 +250,11 @@ exports.handler = async (event, context) => {
   try {
     const data = JSON.parse(event.body);
     console.log('Received PCOR data for county:', data.county);
-    console.log('Form data:', data);
+    console.log('Form data:', JSON.stringify(data, null, 2));
+    
+    if (!data.county) {
+      throw new Error('County is required');
+    }
     
     const pdfBytes = await loadPDFTemplate(data.county);
     console.log('PDF template loaded successfully');
@@ -214,12 +276,15 @@ exports.handler = async (event, context) => {
     };
   } catch (error) {
     console.error('Error generating PCOR:', error);
+    console.error('Stack trace:', error.stack);
+    
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         error: 'Failed to generate PCOR form',
-        details: error.message
+        details: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       })
     };
   }
