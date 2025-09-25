@@ -56,11 +56,9 @@ async function fillPCORForm(data, pdfBytes, county) {
     
     console.log('Form has ' + fields.length + ' fields available');
     
-    // Debug: Log all field names
-    console.log('Available fields in form:');
-    fields.forEach(field => {
-      console.log('  - "' + field.getName() + '" (' + field.constructor.name + ')');
-    });
+    // Get all checkboxes for indexed access
+    const allCheckboxes = fields.filter(field => field.constructor.name === 'PDFCheckBox');
+    console.log('Total checkboxes found: ' + allCheckboxes.length);
     
     const dateInfo = formatDate(data.transferDate);
     
@@ -71,17 +69,15 @@ async function fillPCORForm(data, pdfBytes, county) {
     const propertyFullAddress = data.propertyAddress ? 
       `${data.propertyAddress}, ${data.propertyCity || ''}, ${data.propertyState || 'CA'} ${data.propertyZip || ''}` : '';
     
-    // Try multiple field name variations for better matching
+    // Text field mappings
     const fieldMappings = {
       // Top section - Buyer name and address (combined field)
       'NAME AND MAILING ADDRESS OF BUYER/TRANSFEREE': `${data.buyerName}\n${buyerFullAddress}`,
       'Name and mailing address of buyer/transferee': `${data.buyerName}\n${buyerFullAddress}`,
-      'BUYER/TRANSFEREE': `${data.buyerName}\n${buyerFullAddress}`,
       
       // APN
       'ASSESSOR\'S PARCEL NUMBER': data.apn,
       'Assessors parcel number': data.apn,
-      'APN': data.apn,
       
       // Seller
       'SELLER/TRANSFEROR': data.sellerName,
@@ -90,12 +86,11 @@ async function fillPCORForm(data, pdfBytes, county) {
       // Contact Information
       'BUYER\'S DAYTIME TELEPHONE NUMBER': data.buyerPhone,
       'buyer\'s daytime telephone number1': data.buyerPhone,
-      'area code': data.buyerAreaCode,
       
       'BUYER\'S EMAIL ADDRESS': data.buyerEmail,
       'Buyer\'s email address': data.buyerEmail,
       
-      // Property Address - Full address in one field
+      // Property Address
       'STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY': propertyFullAddress,
       'street address or physical location of real property': propertyFullAddress,
       
@@ -123,24 +118,6 @@ async function fillPCORForm(data, pdfBytes, county) {
       'ZIP CODE': data.mailingZip || data.buyerZip || data.propertyZip,
       'ZIP code': data.mailingZip || data.buyerZip || data.propertyZip,
       
-      // Financial Information
-      'Total purchase price': formatCurrency(data.purchasePrice),
-      'A. Total purchase price': formatCurrency(data.purchasePrice),
-      
-      'Cash down payment or value of trade or exchange excluding closing costs': formatCurrency(data.downPayment),
-      'B. Cash down payment': formatCurrency(data.downPayment),
-      
-      'First deed of trust amount': formatCurrency(data.firstLoan),
-      'C. First deed of trust @ %': data.firstLoanInterest,
-      'First deed of trust interest': data.firstLoanInterest,
-      'First deed of trust interest for': data.firstLoanTerm,
-      'First deed of trust monthly payment': formatCurrency(data.firstLoanPayment),
-      
-      'D. Second deed of trust amount': formatCurrency(data.secondLoan),
-      'D. Second deed of trust @': data.secondLoanInterest,
-      'D. Second deed of trust interest for': data.secondLoanTerm,
-      'D. Second deed of trust monthly payment': formatCurrency(data.secondLoanPayment),
-      
       // Page 2 - Signature Section (minimal)
       'Name of buyer/transferee/personal representative/corporate officer (please print)': data.buyerName + ' as Trustor/Trustee',
       'title': 'Trustor/Trustee',
@@ -149,28 +126,15 @@ async function fillPCORForm(data, pdfBytes, county) {
     // Fill text fields
     for (const [fieldName, value] of Object.entries(fieldMappings)) {
       if (value) {
-        // Try multiple approaches to find and fill the field
-        let filled = false;
-        
-        // Try exact match
         try {
           const field = form.getTextField(fieldName);
           field.setText(value.toString());
-          console.log('✓ Set field "' + fieldName + '" to "' + value + '"');
-          filled = true;
+          console.log('✓ Set field "' + fieldName + '"');
         } catch (e) {
-          // Not found with exact match
-        }
-        
-        // If not filled, try to find by partial match
-        if (!filled) {
+          // Try case-insensitive
           const foundField = fields.find(field => {
             const name = field.getName();
-            if (!name) return false;
-            
-            // Try case-insensitive contains match
-            return (name.toLowerCase().includes(fieldName.toLowerCase()) || 
-                    fieldName.toLowerCase().includes(name.toLowerCase())) &&
+            return name && name.toLowerCase() === fieldName.toLowerCase() && 
                    field.constructor.name.includes('TextField');
           });
           
@@ -178,140 +142,133 @@ async function fillPCORForm(data, pdfBytes, county) {
             try {
               const textField = form.getTextField(foundField.getName());
               textField.setText(value.toString());
-              console.log('✓ Set field "' + foundField.getName() + '" to "' + value + '" (partial match)');
-              filled = true;
+              console.log('✓ Set field "' + foundField.getName() + '"');
             } catch (e2) {
-              console.log('✗ Error setting field: ' + e2.message);
+              console.log('✗ Could not set field: ' + fieldName);
             }
           }
         }
-        
-        if (!filled) {
-          console.log('✗ Could not find field for: "' + fieldName + '"');
-        }
       }
     }
     
-    // Handle checkboxes - need exact field names
-    const checkboxMappings = {};
+    // CHECKBOX HANDLING - Using index-based approach
+    // Most PCOR forms have checkboxes in a predictable order
     
-    // Principal Residence
-    if (data.principalResidence === 'yes' || data.principalResidence === true) {
-      checkboxMappings['YES'] = true;  // First YES checkbox
-      checkboxMappings['This property is intended as my principal residence'] = true;
-    } else {
-      checkboxMappings['NO'] = true;  // First NO checkbox
+    // Define which checkboxes to check based on data
+    const checkboxesToCheck = [];
+    
+    // Principal Residence Question (usually first 2 checkboxes)
+    if (data.principalResidence === 'yes' || data.principalResidence === true || data.principalResidence === 'on') {
+      checkboxesToCheck.push(0); // YES checkbox (first one)
+    } else if (data.principalResidence === 'no' || data.principalResidence === false) {
+      checkboxesToCheck.push(1); // NO checkbox (second one)
     }
     
-    // Disabled Veteran
+    // Disabled Veteran Question (usually next 2 checkboxes)
     if (data.disabledVeteran === 'yes') {
-      checkboxMappings['YES '] = true;  // Second YES (with space)
+      checkboxesToCheck.push(2); // YES checkbox (third one)
     } else if (data.disabledVeteran === 'no') {
-      checkboxMappings['NO '] = true;  // Second NO (with space)
+      checkboxesToCheck.push(3); // NO checkbox (fourth one)
     }
     
-    // Transfer exclusions - Part 1
+    // Part 1 Transfer Information - Exclusions
+    // These typically start around checkbox index 4-6
+    let exclusionStartIndex = 4;
+    
     if (data.exclusions && Array.isArray(data.exclusions)) {
-      if (data.exclusions.includes('spouses')) {
-        checkboxMappings['A. This transfer is solely between spouses'] = true;
-      }
-      if (data.exclusions.includes('domesticPartners')) {
-        checkboxMappings['B. This transfer is solely between domestic partners'] = true;
-      }
-      if (data.exclusions.includes('parentChild')) {
-        checkboxMappings['C. This is a transfer'] = true;
-        checkboxMappings['between parent(s) and child(ren)'] = true;
-      }
-      if (data.exclusions.includes('grandparentGrandchild')) {
-        checkboxMappings['between grandparent(s) and grandchild(ren)'] = true;
-      }
-      if (data.exclusions.includes('cotenant')) {
-        checkboxMappings['D. This transfer is the result of a cotenant\'s death'] = true;
-      }
-      if (data.exclusions.includes('over55')) {
-        checkboxMappings['E. This transaction is to replace a principal residence'] = true;
-      }
-      if (data.exclusions.includes('disabled')) {
-        checkboxMappings['F. This transaction is to replace a principal residence by a person who is severely disabled'] = true;
-      }
+      data.exclusions.forEach(exclusion => {
+        switch(exclusion) {
+          case 'spouses':
+            checkboxesToCheck.push(exclusionStartIndex); // Section A
+            break;
+          case 'domesticPartners':
+            checkboxesToCheck.push(exclusionStartIndex + 1); // Section B
+            break;
+          case 'parentChild':
+            checkboxesToCheck.push(exclusionStartIndex + 2); // Section C parent-child
+            checkboxesToCheck.push(exclusionStartIndex + 3); // between parent(s) and child(ren)
+            break;
+          case 'grandparentGrandchild':
+            checkboxesToCheck.push(exclusionStartIndex + 2); // Section C grandparent
+            checkboxesToCheck.push(exclusionStartIndex + 4); // between grandparent(s) and grandchild(ren)
+            break;
+          case 'cotenant':
+            checkboxesToCheck.push(exclusionStartIndex + 5); // Section D
+            break;
+          case 'over55':
+            checkboxesToCheck.push(exclusionStartIndex + 6); // Section E
+            break;
+          case 'disabled':
+            checkboxesToCheck.push(exclusionStartIndex + 7); // Section F
+            break;
+          case 'disaster':
+            checkboxesToCheck.push(exclusionStartIndex + 8); // Section G
+            break;
+        }
+      });
     }
     
-    // Set checkboxes
-    for (const [fieldName, shouldCheck] of Object.entries(checkboxMappings)) {
-      if (shouldCheck) {
-        let checked = false;
-        
-        // Try exact match
+    // Special handling for specific counties if needed
+    if (county === 'los-angeles' && data.transferType) {
+      // Los Angeles might have different checkbox ordering
+      // Adjust indices as needed
+    }
+    
+    // Check the checkboxes by index
+    console.log('Attempting to check checkboxes at indices: ' + checkboxesToCheck.join(', '));
+    
+    checkboxesToCheck.forEach(index => {
+      if (index < allCheckboxes.length) {
         try {
-          const checkbox = form.getCheckBox(fieldName);
-          checkbox.check();
-          console.log('✓ Checked "' + fieldName + '"');
-          checked = true;
+          const checkbox = allCheckboxes[index];
+          const checkboxName = checkbox.getName();
+          
+          // Get the checkbox through the form to ensure we can manipulate it
+          const formCheckbox = form.getCheckBox(checkboxName);
+          formCheckbox.check();
+          
+          console.log(`✓ Checked checkbox [${index}]: "${checkboxName}"`);
         } catch (e) {
-          // Not found with exact match
-        }
-        
-        // If not checked, try to find by index or partial match
-        if (!checked) {
-          // Get all checkboxes
-          const checkboxes = fields.filter(field => field.constructor.name === 'PDFCheckBox');
+          console.log(`✗ Could not check checkbox at index ${index}: ${e.message}`);
           
-          // For YES/NO checkboxes, use index-based approach
-          if (fieldName === 'YES' && checkboxes.length > 0) {
-            try {
-              const checkbox = form.getCheckBox(checkboxes[0].getName());
-              checkbox.check();
-              console.log('✓ Checked first YES checkbox (principal residence)');
-              checked = true;
-            } catch (e) {}
-          } else if (fieldName === 'NO' && checkboxes.length > 1) {
-            try {
-              const checkbox = form.getCheckBox(checkboxes[1].getName());
-              checkbox.check();
-              console.log('✓ Checked first NO checkbox (principal residence)');
-              checked = true;
-            } catch (e) {}
-          } else if (fieldName === 'YES ' && checkboxes.length > 2) {
-            try {
-              const checkbox = form.getCheckBox(checkboxes[2].getName());
-              checkbox.check();
-              console.log('✓ Checked second YES checkbox (veteran status)');
-              checked = true;
-            } catch (e) {}
-          } else if (fieldName === 'NO ' && checkboxes.length > 3) {
-            try {
-              const checkbox = form.getCheckBox(checkboxes[3].getName());
-              checkbox.check();
-              console.log('✓ Checked second NO checkbox (veteran status)');
-              checked = true;
-            } catch (e) {}
-          }
-          
-          // Try partial match for other checkboxes
-          if (!checked) {
-            const foundCheckbox = checkboxes.find(field => {
-              const name = field.getName();
-              return name && (
-                name.toLowerCase().includes(fieldName.toLowerCase()) ||
-                fieldName.toLowerCase().includes(name.toLowerCase())
-              );
-            });
-            
-            if (foundCheckbox) {
-              try {
-                const checkbox = form.getCheckBox(foundCheckbox.getName());
-                checkbox.check();
-                console.log('✓ Checked "' + foundCheckbox.getName() + '" (partial match for "' + fieldName + '")');
-                checked = true;
-              } catch (e2) {
-                console.log('✗ Error checking checkbox: ' + e2.message);
+          // Alternative approach: try to manipulate the widget directly
+          try {
+            const checkbox = allCheckboxes[index];
+            const widgets = checkbox.acroField.getWidgets();
+            if (widgets && widgets.length > 0) {
+              // Set the appearance state directly
+              const states = widgets[0].getAppearanceStates();
+              if (states && states.length > 1) {
+                // Usually states[0] is unchecked, states[1] is checked
+                widgets[0].setAppearanceState(states[1]);
+                console.log(`✓ Set checkbox [${index}] via widget manipulation`);
               }
             }
+          } catch (e2) {
+            console.log(`✗ Widget manipulation also failed for checkbox ${index}`);
           }
         }
-        
-        if (!checked) {
-          console.log('✗ Could not find checkbox for: "' + fieldName + '"');
+      }
+    });
+    
+    // Also try checking by field name patterns for specific checkboxes
+    const namedCheckboxPatterns = {
+      'YES': data.principalResidence === 'yes',
+      'NO': data.principalResidence === 'no',
+      'Check Box1': data.principalResidence === 'yes',
+      'Check Box2': data.principalResidence === 'no',
+      'Check Box3': data.disabledVeteran === 'yes',
+      'Check Box4': data.disabledVeteran === 'no',
+    };
+    
+    for (const [pattern, shouldCheck] of Object.entries(namedCheckboxPatterns)) {
+      if (shouldCheck) {
+        try {
+          const checkbox = form.getCheckBox(pattern);
+          checkbox.check();
+          console.log(`✓ Checked checkbox by name: "${pattern}"`);
+        } catch (e) {
+          // This pattern didn't match any checkbox
         }
       }
     }
@@ -362,6 +319,14 @@ exports.handler = async (event, context) => {
       data.buyerZip = data.propertyZip;
     }
     
+    // Set default values for checkboxes if not provided
+    if (!data.principalResidence) {
+      data.principalResidence = 'yes'; // Default to YES for principal residence
+    }
+    if (!data.disabledVeteran) {
+      data.disabledVeteran = 'no'; // Default to NO for disabled veteran
+    }
+    
     const pdfBytes = await loadPDFTemplate(data.county);
     console.log('PDF template loaded successfully');
     
@@ -392,4 +357,3 @@ exports.handler = async (event, context) => {
     };
   }
 };
-
