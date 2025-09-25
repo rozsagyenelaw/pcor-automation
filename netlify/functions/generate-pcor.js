@@ -1,4 +1,4 @@
-const { PDFDocument, rgb, StandardFonts, PDFName } = require('pdf-lib');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 
 function formatDate(dateString) {
   if (!dateString) return {};
@@ -54,38 +54,40 @@ async function fillPCORForm(data, pdfBytes, county) {
     const form = pdfDoc.getForm();
     const fields = form.getFields();
     
-    console.log('=== FORM FIELD ANALYSIS ===');
+    console.log('=== COMPLETE FIELD ANALYSIS ===');
     console.log('Total fields: ' + fields.length);
     
-    // Analyze checkboxes in detail
-    const allCheckboxes = fields.filter(field => field.constructor.name === 'PDFCheckBox');
-    console.log('\n=== CHECKBOX ANALYSIS ===');
-    console.log('Total checkboxes: ' + allCheckboxes.length);
+    // Analyze ALL field types
+    const fieldTypes = {};
+    fields.forEach(field => {
+      const type = field.constructor.name;
+      fieldTypes[type] = (fieldTypes[type] || 0) + 1;
+    });
     
-    // List first 30 checkboxes with details
-    console.log('\nFirst 30 checkbox details:');
-    for (let i = 0; i < Math.min(30, allCheckboxes.length); i++) {
-      const checkbox = allCheckboxes[i];
-      const name = checkbox.getName();
-      
-      // Get the internal field reference
-      const acroField = checkbox.acroField;
-      const widgets = acroField.getWidgets();
-      let states = 'N/A';
-      let currentState = 'N/A';
-      
-      if (widgets && widgets.length > 0) {
-        try {
-          states = widgets[0].getAppearanceStates();
-          const ap = widgets[0].getAppearances();
-          currentState = widgets[0].getAppearanceState();
-        } catch (e) {}
-      }
-      
-      console.log(`[${i}] Name: "${name}"`);
-      console.log(`     States: ${JSON.stringify(states)}`);
-      console.log(`     Current: ${currentState}`);
+    console.log('\nField types found:');
+    for (const [type, count] of Object.entries(fieldTypes)) {
+      console.log(`  ${type}: ${count}`);
     }
+    
+    // Look for radio buttons (often used instead of checkboxes)
+    const radioButtons = fields.filter(field => field.constructor.name === 'PDFRadioGroup');
+    console.log('\n=== RADIO BUTTON ANALYSIS ===');
+    console.log('Total radio groups: ' + radioButtons.length);
+    
+    // List first 20 radio button groups
+    console.log('\nFirst 20 radio button details:');
+    for (let i = 0; i < Math.min(20, radioButtons.length); i++) {
+      const radio = radioButtons[i];
+      const name = radio.getName();
+      const options = radio.getOptions();
+      console.log(`[${i}] Name: "${name}"`);
+      console.log(`     Options: ${JSON.stringify(options)}`);
+    }
+    
+    // Look for buttons
+    const buttons = fields.filter(field => field.constructor.name === 'PDFButton');
+    console.log('\n=== BUTTON ANALYSIS ===');
+    console.log('Total buttons: ' + buttons.length);
     
     const dateInfo = formatDate(data.transferDate);
     
@@ -96,7 +98,7 @@ async function fillPCORForm(data, pdfBytes, county) {
     const propertyFullAddress = data.propertyAddress ? 
       `${data.propertyAddress}, ${data.propertyCity || ''}, ${data.propertyState || 'CA'} ${data.propertyZip || ''}` : '';
     
-    // Text field mappings (keeping these as they work)
+    // Text field mappings (these are working fine)
     const fieldMappings = {
       'NAME AND MAILING ADDRESS OF BUYER/TRANSFEREE': `${data.buyerName}\n${buyerFullAddress}`,
       'Name and mailing address of buyer/transferee': `${data.buyerName}\n${buyerFullAddress}`,
@@ -153,115 +155,77 @@ async function fillPCORForm(data, pdfBytes, county) {
       }
     }
     
-    // NEW APPROACH FOR CHECKBOXES - Direct widget manipulation
-    console.log('\n=== ATTEMPTING TO CHECK BOXES ===');
-    
-    // Check NO for principal residence (index 1)
-    if (allCheckboxes.length > 1) {
-      try {
-        const checkbox = allCheckboxes[1];
-        const widgets = checkbox.acroField.getWidgets();
-        if (widgets && widgets.length > 0) {
-          const widget = widgets[0];
-          const states = widget.getAppearanceStates();
-          console.log(`Principal Residence NO - Available states: ${JSON.stringify(states)}`);
-          
-          // Try different state values
-          if (states && states.length > 0) {
-            // Try the non-Off state (usually 'Yes', '1', 'On', or something else)
-            const checkState = states.find(s => s !== 'Off') || states[1] || states[0];
-            widget.setAppearanceState(checkState);
-            console.log(`✓ Set Principal Residence NO to state: ${checkState}`);
-          }
-        }
-      } catch (e) {
-        console.log('✗ Failed to check Principal Residence NO: ' + e.message);
-      }
-    }
-    
-    // Check NO for disabled veteran (index 3)
-    if (allCheckboxes.length > 3) {
-      try {
-        const checkbox = allCheckboxes[3];
-        const widgets = checkbox.acroField.getWidgets();
-        if (widgets && widgets.length > 0) {
-          const widget = widgets[0];
-          const states = widget.getAppearanceStates();
-          console.log(`Disabled Veteran NO - Available states: ${JSON.stringify(states)}`);
-          
-          if (states && states.length > 0) {
-            const checkState = states.find(s => s !== 'Off') || states[1] || states[0];
-            widget.setAppearanceState(checkState);
-            console.log(`✓ Set Disabled Veteran NO to state: ${checkState}`);
-          }
-        }
-      } catch (e) {
-        console.log('✗ Failed to check Disabled Veteran NO: ' + e.message);
-      }
-    }
-    
-    // Check YES for Section L (try multiple indices)
-    const sectionLIndices = [22, 23, 24, 25, 26, 27, 28];
-    for (const idx of sectionLIndices) {
-      if (idx < allCheckboxes.length) {
+    // HANDLE RADIO BUTTONS (if they exist)
+    if (radioButtons.length > 0) {
+      console.log('\n=== ATTEMPTING TO SELECT RADIO BUTTONS ===');
+      
+      // Principal Residence - Select NO (usually first radio group)
+      if (radioButtons.length > 0) {
         try {
-          const checkbox = allCheckboxes[idx];
-          const name = checkbox.getName() || '';
+          const radio = radioButtons[0];
+          const options = radio.getOptions();
+          console.log(`Principal Residence options: ${JSON.stringify(options)}`);
           
-          // Check if this might be Section L
-          if (name.toLowerCase().includes('trust') || 
-              name.toLowerCase().includes('revocable') || 
-              name.toLowerCase().includes('l1') ||
-              idx === 24) { // Often Section L is around index 24
-            
-            const widgets = checkbox.acroField.getWidgets();
-            if (widgets && widgets.length > 0) {
-              const widget = widgets[0];
-              const states = widget.getAppearanceStates();
-              console.log(`Section L [${idx}] - Available states: ${JSON.stringify(states)}`);
-              
-              if (states && states.length > 0) {
-                const checkState = states.find(s => s !== 'Off') || states[1] || states[0];
-                widget.setAppearanceState(checkState);
-                console.log(`✓ Set Section L to state: ${checkState} at index ${idx}`);
-                break; // Stop after first successful L section
-              }
-            }
+          // Select NO option (usually second option)
+          const noOption = options.find(opt => opt.toLowerCase().includes('no')) || options[1] || options[0];
+          if (noOption) {
+            radio.select(noOption);
+            console.log(`✓ Selected "${noOption}" for Principal Residence`);
           }
         } catch (e) {
-          console.log(`✗ Failed at index ${idx}: ${e.message}`);
+          console.log('✗ Failed to select Principal Residence: ' + e.message);
+        }
+      }
+      
+      // Disabled Veteran - Select NO (usually second radio group)
+      if (radioButtons.length > 1) {
+        try {
+          const radio = radioButtons[1];
+          const options = radio.getOptions();
+          console.log(`Disabled Veteran options: ${JSON.stringify(options)}`);
+          
+          const noOption = options.find(opt => opt.toLowerCase().includes('no')) || options[1] || options[0];
+          if (noOption) {
+            radio.select(noOption);
+            console.log(`✓ Selected "${noOption}" for Disabled Veteran`);
+          }
+        } catch (e) {
+          console.log('✗ Failed to select Disabled Veteran: ' + e.message);
+        }
+      }
+      
+      // Section L - Try to find and select YES
+      for (let i = 2; i < radioButtons.length; i++) {
+        const radio = radioButtons[i];
+        const name = radio.getName();
+        
+        // Check if this is Section L (trust-related)
+        if (name && (name.toLowerCase().includes('trust') || 
+                     name.toLowerCase().includes('revocable') || 
+                     name.toLowerCase().includes('l1') ||
+                     name.includes('L.'))) {
+          try {
+            const options = radio.getOptions();
+            console.log(`Section L options at [${i}]: ${JSON.stringify(options)}`);
+            
+            const yesOption = options.find(opt => opt.toLowerCase().includes('yes')) || options[0];
+            if (yesOption) {
+              radio.select(yesOption);
+              console.log(`✓ Selected "${yesOption}" for Section L`);
+              break;
+            }
+          } catch (e) {
+            console.log(`✗ Failed to select Section L at index ${i}: ${e.message}`);
+          }
         }
       }
     }
     
-    // Alternative method: Try using the form's check method with error handling
-    console.log('\n=== ALTERNATIVE CHECK METHOD ===');
-    try {
-      // Try to check specific boxes by index using form method
-      const checkIndices = [1, 3, 24]; // NO principal, NO veteran, YES section L
-      
-      for (const idx of checkIndices) {
-        if (idx < allCheckboxes.length) {
-          const checkboxName = allCheckboxes[idx].getName();
-          try {
-            const cb = form.getCheckBox(checkboxName);
-            cb.check();
-            console.log(`✓ Checked box at index ${idx} using form.check()`);
-          } catch (e) {
-            // Try toggle if check doesn't work
-            try {
-              const cb = form.getCheckBox(checkboxName);
-              cb.uncheck(); // First uncheck
-              cb.check();   // Then check
-              console.log(`✓ Toggled box at index ${idx}`);
-            } catch (e2) {
-              console.log(`✗ Could not check/toggle box at index ${idx}`);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.log('Alternative method error: ' + e.message);
+    // If no radio buttons, try alternative approaches
+    if (radioButtons.length === 0) {
+      console.log('\n=== NO RADIO BUTTONS FOUND ===');
+      console.log('This form may use image-based checkboxes or non-standard fields.');
+      console.log('The text fields have been filled, but checkboxes cannot be marked programmatically.');
     }
     
     const pdfBytesResult = await pdfDoc.save();
@@ -321,7 +285,7 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         success: true,
         pdfUrl: dataUrl,
-        message: 'PCOR form generated with diagnostic logging'
+        message: 'PCOR form generated - check logs for field analysis'
       })
     };
   } catch (error) {
