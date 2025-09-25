@@ -126,16 +126,16 @@ async function fillPCORForm(data, pdfBytes, county) {
       }
     }
     
-    // CHECKBOX HANDLING
+    // CHECKBOX HANDLING - CORRECTED INDICES
     console.log('Checking appropriate checkboxes...');
     
-    // List checkbox names for debugging
-    console.log('First 30 checkbox names:');
-    for (let i = 0; i < Math.min(30, allCheckboxes.length); i++) {
+    // Debug: List first 10 checkbox names to understand ordering
+    console.log('First 10 checkbox names:');
+    for (let i = 0; i < Math.min(10, allCheckboxes.length); i++) {
       console.log(`[${i}]: ${allCheckboxes[i].getName()}`);
     }
     
-    // Check NO for principal residence (checkbox at index 1)
+    // Principal Residence - Check NO (second checkbox, index 1)
     if (allCheckboxes.length > 1) {
       try {
         const checkboxName = allCheckboxes[1].getName();
@@ -147,7 +147,7 @@ async function fillPCORForm(data, pdfBytes, county) {
       }
     }
     
-    // Check NO for disabled veteran (checkbox at index 3)  
+    // Disabled Veteran - Check NO (fourth checkbox, index 3)  
     if (allCheckboxes.length > 3) {
       try {
         const checkboxName = allCheckboxes[3].getName();
@@ -159,44 +159,56 @@ async function fillPCORForm(data, pdfBytes, county) {
       }
     }
     
-    // Section L - Check YES (try multiple possible indices)
-    // L1 is typically around index 48-52 in the form
-    const sectionLIndices = [48, 49, 50, 51, 52, 53, 54];
-    let foundSectionL = false;
+    // PART 1 - All should be NO (unchecked) - indices 4-19
+    // These are already unchecked by default, so we don't need to do anything
     
-    for (const idx of sectionLIndices) {
-      if (idx < allCheckboxes.length && !foundSectionL) {
-        const checkboxName = allCheckboxes[idx].getName();
-        
-        // Check if this is section L (revocable trust)
-        if (checkboxName && (
-            checkboxName.toLowerCase().includes('l1') ||
-            checkboxName.toLowerCase().includes('revocable') ||
-            checkboxName.toLowerCase().includes('trust') ||
-            idx === 50  // Often L1 is exactly at index 50
-        )) {
+    // Section L1 - Check YES 
+    // L1 is "This is a transfer of property to/from a revocable trust..."
+    // In forms with 116 checkboxes, L1 is typically around index 50-54
+    
+    // First, try to find L1 by name
+    let foundL1 = false;
+    for (let i = 40; i < Math.min(60, allCheckboxes.length); i++) {
+      const checkboxName = allCheckboxes[i].getName();
+      if (checkboxName && (
+          checkboxName.includes('L1') ||
+          checkboxName.includes('revocable trust') ||
+          (checkboxName.includes('transfer') && checkboxName.includes('trust'))
+      )) {
+        try {
+          const checkbox = form.getCheckBox(checkboxName);
+          checkbox.check();
+          console.log(`✓ Checked YES for Section L1 at index ${i}: "${checkboxName}"`);
+          foundL1 = true;
+          break;
+        } catch (e) {
+          console.log(`✗ Found L1 at index ${i} but could not check: ${e.message}`);
+        }
+      }
+    }
+    
+    // If not found by name, try specific indices where L1 commonly appears
+    if (!foundL1) {
+      const l1Indices = [50, 51, 52, 53, 54, 48, 49];
+      for (const idx of l1Indices) {
+        if (idx < allCheckboxes.length) {
           try {
+            const checkboxName = allCheckboxes[idx].getName();
             const checkbox = form.getCheckBox(checkboxName);
             checkbox.check();
-            console.log(`✓ Checked YES for Section L1 at index ${idx}`);
-            foundSectionL = true;
+            console.log(`✓ Checked Section L1 at index ${idx} (by position)`);
+            break;
           } catch (e) {
-            console.log(`✗ Could not check Section L at index ${idx}: ${e.message}`);
+            // Continue to next index
           }
         }
       }
     }
     
-    // If not found by search, try index 50 directly (common position for L1)
-    if (!foundSectionL && allCheckboxes.length > 50) {
-      try {
-        const checkboxName = allCheckboxes[50].getName();
-        const checkbox = form.getCheckBox(checkboxName);
-        checkbox.check();
-        console.log('✓ Checked Section L1 at default index 50');
-      } catch (e) {
-        console.log('✗ Could not check Section L1 at index 50');
-      }
+    // Debug: Show checkboxes around where L1 should be
+    console.log('\nCheckboxes from index 48-54 (where L1 typically is):');
+    for (let i = 48; i < Math.min(55, allCheckboxes.length); i++) {
+      console.log(`[${i}]: ${allCheckboxes[i].getName()}`);
     }
     
     const pdfBytesResult = await pdfDoc.save();
