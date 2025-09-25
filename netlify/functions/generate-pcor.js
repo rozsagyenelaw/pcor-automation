@@ -1,4 +1,4 @@
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const { PDFDocument, rgb, StandardFonts, PDFName } = require('pdf-lib');
 
 function formatDate(dateString) {
   if (!dateString) return {};
@@ -54,17 +54,38 @@ async function fillPCORForm(data, pdfBytes, county) {
     const form = pdfDoc.getForm();
     const fields = form.getFields();
     
-    console.log('Form has ' + fields.length + ' fields available');
+    console.log('=== FORM FIELD ANALYSIS ===');
+    console.log('Total fields: ' + fields.length);
     
-    // Get all checkboxes for indexed access
+    // Analyze checkboxes in detail
     const allCheckboxes = fields.filter(field => field.constructor.name === 'PDFCheckBox');
-    console.log('Total checkboxes found: ' + allCheckboxes.length);
+    console.log('\n=== CHECKBOX ANALYSIS ===');
+    console.log('Total checkboxes: ' + allCheckboxes.length);
     
-    // Log all checkbox names for debugging
-    console.log('Checkbox field names:');
-    allCheckboxes.forEach((cb, index) => {
-      console.log(`  [${index}]: ${cb.getName()}`);
-    });
+    // List first 30 checkboxes with details
+    console.log('\nFirst 30 checkbox details:');
+    for (let i = 0; i < Math.min(30, allCheckboxes.length); i++) {
+      const checkbox = allCheckboxes[i];
+      const name = checkbox.getName();
+      
+      // Get the internal field reference
+      const acroField = checkbox.acroField;
+      const widgets = acroField.getWidgets();
+      let states = 'N/A';
+      let currentState = 'N/A';
+      
+      if (widgets && widgets.length > 0) {
+        try {
+          states = widgets[0].getAppearanceStates();
+          const ap = widgets[0].getAppearances();
+          currentState = widgets[0].getAppearanceState();
+        } catch (e) {}
+      }
+      
+      console.log(`[${i}] Name: "${name}"`);
+      console.log(`     States: ${JSON.stringify(states)}`);
+      console.log(`     Current: ${currentState}`);
+    }
     
     const dateInfo = formatDate(data.transferDate);
     
@@ -75,56 +96,36 @@ async function fillPCORForm(data, pdfBytes, county) {
     const propertyFullAddress = data.propertyAddress ? 
       `${data.propertyAddress}, ${data.propertyCity || ''}, ${data.propertyState || 'CA'} ${data.propertyZip || ''}` : '';
     
-    // Text field mappings
+    // Text field mappings (keeping these as they work)
     const fieldMappings = {
-      // Top section - Buyer name and address (combined field)
       'NAME AND MAILING ADDRESS OF BUYER/TRANSFEREE': `${data.buyerName}\n${buyerFullAddress}`,
       'Name and mailing address of buyer/transferee': `${data.buyerName}\n${buyerFullAddress}`,
-      
-      // APN
       'ASSESSOR\'S PARCEL NUMBER': data.apn,
       'Assessors parcel number': data.apn,
-      
-      // Seller
       'SELLER/TRANSFEROR': data.sellerName,
       'seller transferor': data.sellerName,
-      
-      // Contact Information
       'BUYER\'S DAYTIME TELEPHONE NUMBER': data.buyerPhone,
       'buyer\'s daytime telephone number1': data.buyerPhone,
-      
       'BUYER\'S EMAIL ADDRESS': data.buyerEmail,
       'Buyer\'s email address': data.buyerEmail,
-      
-      // Property Address
       'STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY': propertyFullAddress,
       'street address or physical location of real property': propertyFullAddress,
-      
-      // Date fields
       'MO': dateInfo.month,
       'Month': dateInfo.month,
       'DAY': dateInfo.day,
       'day': dateInfo.day,
       'YEAR': dateInfo.year,
       'year': dateInfo.year,
-      
-      // Mail Property Tax To section
       'MAIL PROPERTY TAX INFORMATION TO (NAME)': data.buyerName,
       'mail property tax information to (name)': data.buyerName,
-      
       'MAIL PROPERTY TAX INFORMATION TO (ADDRESS)': data.mailingAddress || data.buyerAddress,
       'Mail property tax informatino to address': data.mailingAddress || data.buyerAddress,
-      
       'CITY': data.mailingCity || data.buyerCity || data.propertyCity,
       'city': data.mailingCity || data.buyerCity || data.propertyCity,
-      
       'STATE': data.mailingState || data.buyerState || 'CA',
       'state': data.mailingState || data.buyerState || 'CA',
-      
       'ZIP CODE': data.mailingZip || data.buyerZip || data.propertyZip,
       'ZIP code': data.mailingZip || data.buyerZip || data.propertyZip,
-      
-      // Page 2 - Signature Section (minimal)
       'Name of buyer/transferee/personal representative/corporate officer (please print)': data.buyerName + ' as Trustor/Trustee',
       'title': 'Trustor/Trustee',
     };
@@ -135,9 +136,7 @@ async function fillPCORForm(data, pdfBytes, county) {
         try {
           const field = form.getTextField(fieldName);
           field.setText(value.toString());
-          console.log('✓ Set field "' + fieldName + '"');
         } catch (e) {
-          // Try case-insensitive
           const foundField = fields.find(field => {
             const name = field.getName();
             return name && name.toLowerCase() === fieldName.toLowerCase() && 
@@ -148,110 +147,121 @@ async function fillPCORForm(data, pdfBytes, county) {
             try {
               const textField = form.getTextField(foundField.getName());
               textField.setText(value.toString());
-              console.log('✓ Set field "' + foundField.getName() + '"');
-            } catch (e2) {
-              console.log('✗ Could not set field: ' + fieldName);
-            }
+            } catch (e2) {}
           }
         }
       }
     }
     
-    // CHECKBOX HANDLING - HARDCODED FOR YOUR SPECIFIC NEEDS
-    // Based on your requirement: All NO except Section L is YES
+    // NEW APPROACH FOR CHECKBOXES - Direct widget manipulation
+    console.log('\n=== ATTEMPTING TO CHECK BOXES ===');
     
+    // Check NO for principal residence (index 1)
+    if (allCheckboxes.length > 1) {
+      try {
+        const checkbox = allCheckboxes[1];
+        const widgets = checkbox.acroField.getWidgets();
+        if (widgets && widgets.length > 0) {
+          const widget = widgets[0];
+          const states = widget.getAppearanceStates();
+          console.log(`Principal Residence NO - Available states: ${JSON.stringify(states)}`);
+          
+          // Try different state values
+          if (states && states.length > 0) {
+            // Try the non-Off state (usually 'Yes', '1', 'On', or something else)
+            const checkState = states.find(s => s !== 'Off') || states[1] || states[0];
+            widget.setAppearanceState(checkState);
+            console.log(`✓ Set Principal Residence NO to state: ${checkState}`);
+          }
+        }
+      } catch (e) {
+        console.log('✗ Failed to check Principal Residence NO: ' + e.message);
+      }
+    }
+    
+    // Check NO for disabled veteran (index 3)
+    if (allCheckboxes.length > 3) {
+      try {
+        const checkbox = allCheckboxes[3];
+        const widgets = checkbox.acroField.getWidgets();
+        if (widgets && widgets.length > 0) {
+          const widget = widgets[0];
+          const states = widget.getAppearanceStates();
+          console.log(`Disabled Veteran NO - Available states: ${JSON.stringify(states)}`);
+          
+          if (states && states.length > 0) {
+            const checkState = states.find(s => s !== 'Off') || states[1] || states[0];
+            widget.setAppearanceState(checkState);
+            console.log(`✓ Set Disabled Veteran NO to state: ${checkState}`);
+          }
+        }
+      } catch (e) {
+        console.log('✗ Failed to check Disabled Veteran NO: ' + e.message);
+      }
+    }
+    
+    // Check YES for Section L (try multiple indices)
+    const sectionLIndices = [22, 23, 24, 25, 26, 27, 28];
+    for (const idx of sectionLIndices) {
+      if (idx < allCheckboxes.length) {
+        try {
+          const checkbox = allCheckboxes[idx];
+          const name = checkbox.getName() || '';
+          
+          // Check if this might be Section L
+          if (name.toLowerCase().includes('trust') || 
+              name.toLowerCase().includes('revocable') || 
+              name.toLowerCase().includes('l1') ||
+              idx === 24) { // Often Section L is around index 24
+            
+            const widgets = checkbox.acroField.getWidgets();
+            if (widgets && widgets.length > 0) {
+              const widget = widgets[0];
+              const states = widget.getAppearanceStates();
+              console.log(`Section L [${idx}] - Available states: ${JSON.stringify(states)}`);
+              
+              if (states && states.length > 0) {
+                const checkState = states.find(s => s !== 'Off') || states[1] || states[0];
+                widget.setAppearanceState(checkState);
+                console.log(`✓ Set Section L to state: ${checkState} at index ${idx}`);
+                break; // Stop after first successful L section
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`✗ Failed at index ${idx}: ${e.message}`);
+        }
+      }
+    }
+    
+    // Alternative method: Try using the form's check method with error handling
+    console.log('\n=== ALTERNATIVE CHECK METHOD ===');
     try {
-      // For most PCOR forms, the checkboxes are in this order:
-      // [0-1]: Principal residence (YES/NO)
-      // [2-3]: Disabled veteran (YES/NO) 
-      // [4-5]: Section A (YES/NO)
-      // [6-7]: Section B (YES/NO)
-      // ... and so on
+      // Try to check specific boxes by index using form method
+      const checkIndices = [1, 3, 24]; // NO principal, NO veteran, YES section L
       
-      // Principal Residence - Check NO (index 1)
-      if (allCheckboxes.length > 1) {
-        try {
-          const cb = form.getCheckBox(allCheckboxes[1].getName());
-          cb.check();
-          console.log('✓ Checked NO for Principal Residence');
-        } catch (e) {
-          console.log('✗ Could not check Principal Residence NO');
-        }
-      }
-      
-      // Disabled Veteran - Check NO (index 3)
-      if (allCheckboxes.length > 3) {
-        try {
-          const cb = form.getCheckBox(allCheckboxes[3].getName());
-          cb.check();
-          console.log('✓ Checked NO for Disabled Veteran');
-        } catch (e) {
-          console.log('✗ Could not check Disabled Veteran NO');
-        }
-      }
-      
-      // Section L - This is usually around index 22-26 depending on the form
-      // Look for checkbox related to trust/revocable trust
-      // Try multiple indices where Section L might be
-      const sectionLIndices = [22, 23, 24, 25, 26, 27, 28];
-      let sectionLFound = false;
-      
-      for (const idx of sectionLIndices) {
-        if (idx < allCheckboxes.length && !sectionLFound) {
+      for (const idx of checkIndices) {
+        if (idx < allCheckboxes.length) {
           const checkboxName = allCheckboxes[idx].getName();
-          // Check if this might be Section L (trust-related)
-          if (checkboxName && (
-              checkboxName.toLowerCase().includes('trust') ||
-              checkboxName.toLowerCase().includes('revocable') ||
-              checkboxName.toLowerCase().includes('l1') ||
-              checkboxName.toLowerCase().includes('section l')
-          )) {
+          try {
+            const cb = form.getCheckBox(checkboxName);
+            cb.check();
+            console.log(`✓ Checked box at index ${idx} using form.check()`);
+          } catch (e) {
+            // Try toggle if check doesn't work
             try {
               const cb = form.getCheckBox(checkboxName);
-              cb.check();
-              console.log(`✓ Checked Section L at index ${idx}: "${checkboxName}"`);
-              sectionLFound = true;
-            } catch (e) {
-              console.log(`✗ Could not check Section L at index ${idx}`);
+              cb.uncheck(); // First uncheck
+              cb.check();   // Then check
+              console.log(`✓ Toggled box at index ${idx}`);
+            } catch (e2) {
+              console.log(`✗ Could not check/toggle box at index ${idx}`);
             }
           }
         }
       }
-      
-      // If Section L not found by name, try by position (usually around checkbox 24-26)
-      if (!sectionLFound && allCheckboxes.length > 24) {
-        try {
-          const cb = form.getCheckBox(allCheckboxes[24].getName());
-          cb.check();
-          console.log('✓ Checked Section L by position (index 24)');
-        } catch (e) {
-          console.log('✗ Could not check Section L by position');
-        }
-      }
-      
-      // Alternative: Check specific known checkbox names for Section L
-      const sectionLNames = [
-        'L1. This is a transfer of property to/from a revocable trust that may be revoked by the transferor and is for the benefit of the transferor and/or the transferor\'s spouse and/or registered domestic partner',
-        'L1. This is a transfer of property to/from a revocable trust that may be revoked by the transferor and is for the benefit of',
-        'Check Box25',
-        'Check Box26',
-        'YES_L1',
-        'L1'
-      ];
-      
-      for (const name of sectionLNames) {
-        try {
-          const cb = form.getCheckBox(name);
-          cb.check();
-          console.log(`✓ Checked Section L by name: "${name}"`);
-          break;
-        } catch (e) {
-          // This name didn't match
-        }
-      }
-      
-    } catch (error) {
-      console.error('Error in checkbox handling:', error);
+    } catch (e) {
+      console.log('Alternative method error: ' + e.message);
     }
     
     const pdfBytesResult = await pdfDoc.save();
@@ -290,7 +300,6 @@ exports.handler = async (event, context) => {
   try {
     const data = JSON.parse(event.body);
     console.log('Received PCOR data for county:', data.county);
-    console.log('Form data:', data);
     
     // Ensure we have complete address data
     if (!data.buyerAddress && data.propertyAddress) {
@@ -301,10 +310,7 @@ exports.handler = async (event, context) => {
     }
     
     const pdfBytes = await loadPDFTemplate(data.county);
-    console.log('PDF template loaded successfully');
-    
     const filledPdfBytes = await fillPCORForm(data, pdfBytes, data.county);
-    console.log('PDF form filled successfully');
     
     const base64 = Buffer.from(filledPdfBytes).toString('base64');
     const dataUrl = 'data:application/pdf;base64,' + base64;
@@ -315,7 +321,7 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         success: true,
         pdfUrl: dataUrl,
-        message: 'PCOR form for ' + data.county + ' generated successfully'
+        message: 'PCOR form generated with diagnostic logging'
       })
     };
   } catch (error) {
