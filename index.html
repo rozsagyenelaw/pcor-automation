@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>California PCOR Form Automation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+
+        .form-container {
+            padding: 40px;
+        }
+
+        .county-selector {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .county-selector label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .county-selector select {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .county-selector select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .form-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .results h3 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .pdf-link {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+
+        .pdf-link:hover {
+            background: #218838;
+        }
+
+        .error {
+            color: #dc3545;
+            padding: 15px;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            header h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>California PCOR Form Automation</h1>
+            <p>Preliminary Change of Ownership Report Generator</p>
+        </header>
+
+        <div class="form-container">
+            <div class="county-selector">
+                <label for="county">Select County:</label>
+                <select id="county" required>
+                    <option value="">-- Choose County --</option>
+                    <option value="los-angeles">Los Angeles County</option>
+                    <option value="ventura">Ventura County</option>
+                    <option value="orange">Orange County</option>
+                    <option value="san-bernardino">San Bernardino County</option>
+                    <option value="riverside">Riverside County</option>
+                </select>
+            </div>
+
+            <form id="pcorForm">
+                <div class="form-section">
+                    <h2>Buyer/Transferee Information</h2>
+                    <div class="form-group">
+                        <label for="buyerName">Name(s) of Buyer/Transferee:</label>
+                        <input type="text" id="buyerName" name="buyerName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="buyerAddress">Mailing Address:</label>
+                        <input type="text" id="buyerAddress" name="buyerAddress" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="buyerCity">City:</label>
+                            <input type="text" id="buyerCity" name="buyerCity" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="buyerState">State:</label>
+                            <input type="text" id="buyerState" name="buyerState" value="CA" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="buyerZip">Zip Code:</label>
+                            <input type="text" id="buyerZip" name="buyerZip" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="buyerPhone">Phone Number:</label>
+                            <input type="tel" id="buyerPhone" name="buyerPhone" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="buyerEmail">Email Address:</label>
+                        <input type="email" id="buyerEmail" name="buyerEmail">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Property Information</h2>
+                    <div class="form-group">
+                        <label for="apn">Assessor's Parcel Number (APN):</label>
+                        <input type="text" id="apn" name="apn" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="propertyAddress">Street Address of Property:</label>
+                        <input type="text" id="propertyAddress" name="propertyAddress" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="propertyCity">City:</label>
+                            <input type="text" id="propertyCity" name="propertyCity" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="propertyZip">Zip Code:</label>
+                            <input type="text" id="propertyZip" name="propertyZip" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Seller/Transferor Information</h2>
+                    <div class="form-group">
+                        <label for="sellerName">Name(s) of Seller/Transferor:</label>
+                        <input type="text" id="sellerName" name="sellerName" required>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Transfer Information</h2>
+                    <div class="form-group">
+                        <label for="transferDate">Date of Transfer:</label>
+                        <input type="date" id="transferDate" name="transferDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transferType">Type of Transfer:</label>
+                        <select id="transferType" name="transferType" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="purchase">Purchase</option>
+                            <option value="gift">Gift</option>
+                            <option value="inheritance">Inheritance</option>
+                            <option value="foreclosure">Foreclosure</option>
+                            <option value="trade">Trade or Exchange</option>
+                            <option value="contract">Contract of Sale</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="principalResidence" name="principalResidence">
+                        <label for="principalResidence">This property is intended as my principal residence</label>
+                    </div>
+                    <div class="form-group" id="occupancyDateGroup" style="display:none;">
+                        <label for="occupancyDate">Date of Occupancy:</label>
+                        <input type="date" id="occupancyDate" name="occupancyDate">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Purchase Price and Terms of Sale</h2>
+                    <div class="form-group">
+                        <label for="purchasePrice">Total Purchase Price:</label>
+                        <input type="number" id="purchasePrice" name="purchasePrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="downPayment">Cash Down Payment:</label>
+                        <input type="number" id="downPayment" name="downPayment" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="firstLoan">First Deed of Trust Amount:</label>
+                        <input type="number" id="firstLoan" name="firstLoan" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="secondLoan">Second Deed of Trust Amount (if any):</label>
+                        <input type="number" id="secondLoan" name="secondLoan" step="0.01">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Property Type</h2>
+                    <div class="form-group">
+                        <label for="propertyType">Type of Property:</label>
+                        <select id="propertyType" name="propertyType" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="single-family">Single-family residence</option>
+                            <option value="multi-family">Multiple-family residence</option>
+                            <option value="commercial">Commercial/Industrial</option>
+                            <option value="condominium">Condominium</option>
+                            <option value="co-op">Co-op/Own-your-own</option>
+                            <option value="manufactured">Manufactured home</option>
+                            <option value="unimproved">Unimproved lot</option>
+                            <option value="timeshare">Timeshare</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="unitsGroup" style="display:none;">
+                        <label for="units">Number of Units:</label>
+                        <input type="number" id="units" name="units" min="1">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Transfer Exclusions (Check all that apply)</h2>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="betweenSpouses" name="exclusions" value="spouses">
+                        <label for="betweenSpouses">Transfer solely between spouses</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="parentChild" name="exclusions" value="parentChild">
+                        <label for="parentChild">Transfer between parent(s) and child(ren)</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="grandparentGrandchild" name="exclusions" value="grandparentGrandchild">
+                        <label for="grandparentGrandchild">Transfer from grandparent(s) to grandchild(ren)</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="cotenant" name="exclusions" value="cotenant">
+                        <label for="cotenant">Result of cotenant's death</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="over55" name="exclusions" value="over55">
+                        <label for="over55">Principal residence replacement by person 55 years or older</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="disabled" name="exclusions" value="disabled">
+                        <label for="disabled">Principal residence replacement by severely disabled person</label>
+                    </div>
+                </div>
+
+                <div class="btn-container">
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">Clear Form</button>
+                    <button type="submit" class="btn btn-primary">Generate PCOR</button>
+                </div>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Generating your PCOR form...</p>
+                </div>
+
+                <div class="results" id="results">
+                    <h3>Your PCOR Form is Ready!</h3>
+                    <div id="downloadLinks"></div>
+                </div>
+
+                <div class="error" id="error" style="display:none;"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('principalResidence').addEventListener('change', function() {
+            const occupancyGroup = document.getElementById('occupancyDateGroup');
+            occupancyGroup.style.display = this.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('propertyType').addEventListener('change', function() {
+            const unitsGroup = document.getElementById('unitsGroup');
+            unitsGroup.style.display = this.value === 'multi-family' ? 'block' : 'none';
+        });
+
+        document.getElementById('pcorForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const county = document.getElementById('county').value;
+            if (!county) {
+                alert('Please select a county');
+                return;
+            }
+
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('results').classList.remove('active');
+            document.getElementById('error').style.display = 'none';
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            data.county = county;
+            
+            data.exclusions = [];
+            document.querySelectorAll('input[name="exclusions"]:checked').forEach(cb => {
+                data.exclusions.push(cb.value);
+            });
+
+            try {
+                const response = await fetch('/.netlify/functions/generate-pcor', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const downloadLinks = document.getElementById('downloadLinks');
+                    downloadLinks.innerHTML = '<a href="' + result.pdfUrl + '" download="PCOR_' + county + '_' + Date.now() + '.pdf" class="pdf-link">Download PCOR Form</a>';
+                    
+                    document.getElementById('results').classList.add('active');
+                } else {
+                    throw new Error(result.error || 'Failed to generate form');
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = 'Error: ' + error.message;
+                document.getElementById('error').style.display = 'block';
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+            }
+        });
+
+        function clearForm() {
+            if (confirm('Are you sure you want to clear all form data?')) {
+                document.getElementById('pcorForm').reset();
+                document.getElementById('results').classList.remove('active');
+                document.getElementById('error').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
