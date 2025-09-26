@@ -175,17 +175,6 @@
             color: #8898aa;
             margin-top: 5px;
         }
-        .editable-field {
-            background: #fff;
-            border: 2px solid #e0e6ed;
-            padding: 8px 12px;
-            border-radius: 6px;
-            min-height: 38px;
-            cursor: text;
-        }
-        .editable-field:hover {
-            border-color: #5e72e4;
-        }
         .field-status {
             display: inline-block;
             padding: 2px 8px;
@@ -200,6 +189,59 @@
         .field-status.manual {
             background: #fff3cd;
             color: #856404;
+        }
+        .debug-panel {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        .debug-toggle {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .extraction-summary {
+            background: #e8f5ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            display: none;
+        }
+        .extraction-summary h4 {
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+        .extraction-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #d0e7ff;
+        }
+        .extraction-item:last-child {
+            border-bottom: none;
+        }
+        .extraction-item strong {
+            color: #333;
+            display: inline-block;
+            min-width: 150px;
+        }
+        .extraction-item .value {
+            color: #666;
+        }
+        .extraction-item .empty {
+            color: #999;
+            font-style: italic;
         }
     </style>
 </head>
@@ -241,12 +283,23 @@
                     <p>Extracting information from deed...</p>
                 </div>
                 
+                <div class="extraction-summary" id="extraction-summary">
+                    <h4>Extraction Results</h4>
+                    <div id="extraction-details"></div>
+                </div>
+                
                 <div class="success-message" id="upload-success">
                     ✓ Deed uploaded successfully! Information extracted. Please review and edit in the next step.
                 </div>
                 
                 <div class="error-message" id="upload-error">
                     ✗ Error processing deed. Please try again or enter information manually.
+                </div>
+                
+                <button class="debug-toggle" onclick="toggleDebug()">Show/Hide Debug Info</button>
+                <div class="debug-panel" id="debug-panel">
+                    <h4>Debug Information</h4>
+                    <pre id="debug-content"></pre>
                 </div>
             </div>
             
@@ -310,15 +363,15 @@
                     <h3>Property Information</h3>
                     <div class="form-group">
                         <label>Property Address <span class="field-status" id="property-status"></span></label>
-                        <input type="text" id="property-address" placeholder="123 Main St, City, CA 12345">
+                        <input type="text" id="property-address" placeholder="123 Main St">
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>City</label>
+                            <label>City <span class="field-status" id="city-status"></span></label>
                             <input type="text" id="property-city" placeholder="City">
                         </div>
                         <div class="form-group">
-                            <label>ZIP Code</label>
+                            <label>ZIP Code <span class="field-status" id="zip-status"></span></label>
                             <input type="text" id="property-zip" placeholder="12345">
                         </div>
                     </div>
@@ -335,6 +388,12 @@
                 <!-- Mailing Information -->
                 <div class="info-section">
                     <h3>Mailing Information</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="use-property-address" onchange="usePropertyAsMailingAddress()">
+                            Use property address as mailing address
+                        </label>
+                    </div>
                     <div class="form-group">
                         <label>Mailing Address <span class="help-text">(Where to send recorded documents)</span></label>
                         <input type="text" id="mailing-address" placeholder="Street Address">
@@ -371,6 +430,9 @@
                         <h4 style="margin-bottom: 10px;">Trust Transfer Deed</h4>
                         <p class="help-text">Transfers property from individual names to trust</p>
                         <button class="btn" onclick="generateTrustDeed()">Generate Trust Transfer Deed</button>
+                        <span class="help-text" style="display: block; margin-top: 10px;">
+                            Note: Using improved function at /.netlify/functions/generate-trust-deed-improved
+                        </span>
                     </div>
                     
                     <div style="margin-bottom: 30px;">
@@ -388,6 +450,9 @@
                             </select>
                         </div>
                         <button class="btn" onclick="generatePCOR()">Generate PCOR Form</button>
+                        <span class="help-text" style="display: block; margin-top: 10px;">
+                            Note: Using improved function at /.netlify/functions/generate-pcor-improved
+                        </span>
                     </div>
                 </div>
                 
@@ -398,6 +463,11 @@
                 <div class="error-message" id="generate-error">
                     ✗ Error generating document. Please check all required fields are filled.
                 </div>
+                
+                <div class="debug-panel" id="generate-debug" style="display: none;">
+                    <h4>Generation Debug Info</h4>
+                    <pre id="generate-debug-content"></pre>
+                </div>
             </div>
         </div>
     </div>
@@ -405,6 +475,7 @@
     <script>
         let extractedDeedData = {};
         let documentData = {};
+        let debugMode = false;
         
         function switchTab(tabName, element) {
             // Update tabs
@@ -434,6 +505,39 @@
             }
         }
         
+        function toggleDebug() {
+            debugMode = !debugMode;
+            document.getElementById('debug-panel').style.display = debugMode ? 'block' : 'none';
+        }
+        
+        function showExtractionSummary(data) {
+            const summary = document.getElementById('extraction-summary');
+            const details = document.getElementById('extraction-details');
+            
+            const items = [
+                { label: 'Grantee/Grantor 1', value: data.grantor1 || data.grantee },
+                { label: 'Grantor 2', value: data.grantor2 },
+                { label: 'Property Address', value: data.propertyAddress },
+                { label: 'City', value: data.propertyCity },
+                { label: 'ZIP', value: data.propertyZip },
+                { label: 'APN', value: data.apn },
+                { label: 'Legal Description', value: data.legalDescription ? data.legalDescription.substring(0, 100) + '...' : '' },
+                { label: 'Document Type', value: data.documentType },
+                { label: 'Recording Date', value: data.recordingInfo?.recordingDate }
+            ];
+            
+            details.innerHTML = items.map(item => `
+                <div class="extraction-item">
+                    <strong>${item.label}:</strong>
+                    <span class="${item.value ? 'value' : 'empty'}">
+                        ${item.value || '(not found)'}
+                    </span>
+                </div>
+            `).join('');
+            
+            summary.style.display = 'block';
+        }
+        
         async function handleDeedUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -446,6 +550,7 @@
             document.getElementById('ocr-loading').style.display = 'block';
             document.getElementById('upload-success').style.display = 'none';
             document.getElementById('upload-error').style.display = 'none';
+            document.getElementById('extraction-summary').style.display = 'none';
             
             // Convert file to base64
             const reader = new FileReader();
@@ -453,7 +558,8 @@
                 const base64 = e.target.result.split(',')[1]; // Remove data:application/pdf;base64, prefix
                 
                 try {
-                    const response = await fetch('/.netlify/functions/ocr-deed', {
+                    // Try the improved OCR function
+                    const response = await fetch('/.netlify/functions/ocr-deed-improved', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -466,17 +572,26 @@
                     const data = await response.json();
                     console.log('Extracted data:', data);
                     
+                    // Show debug info
+                    if (debugMode && data.rawText) {
+                        document.getElementById('debug-content').textContent = 
+                            'Raw text (first 2000 chars):\n\n' + data.rawText;
+                    }
+                    
                     if (data.success && data.extractedInfo) {
                         extractedDeedData = data.extractedInfo;
                         populateFields(data.extractedInfo);
                         
+                        // Show extraction summary
+                        showExtractionSummary(data.extractedInfo);
+                        
                         document.getElementById('ocr-loading').style.display = 'none';
                         document.getElementById('upload-success').style.display = 'block';
                         
-                        // Auto-switch to next tab
+                        // Auto-switch to next tab after delay
                         setTimeout(() => {
                             document.querySelector('.tab:nth-child(2)').click();
-                        }, 1500);
+                        }, 2000);
                     } else {
                         throw new Error(data.error || 'Extraction failed');
                     }
@@ -485,11 +600,13 @@
                     console.error('Error:', error);
                     document.getElementById('ocr-loading').style.display = 'none';
                     document.getElementById('upload-error').style.display = 'block';
+                    document.getElementById('upload-error').innerHTML += 
+                        `<br>Details: ${error.message}`;
                     
                     // Still allow manual entry
                     setTimeout(() => {
                         document.querySelector('.tab:nth-child(2)').click();
-                    }, 2000);
+                    }, 3000);
                 }
             };
             
@@ -525,10 +642,14 @@
             
             if (data.propertyCity) {
                 document.getElementById('property-city').value = data.propertyCity;
+                document.getElementById('city-status').textContent = 'Extracted';
+                document.getElementById('city-status').className = 'field-status extracted';
             }
             
             if (data.propertyZip) {
                 document.getElementById('property-zip').value = data.propertyZip;
+                document.getElementById('zip-status').textContent = 'Extracted';
+                document.getElementById('zip-status').className = 'field-status extracted';
             }
             
             if (data.apn) {
@@ -560,6 +681,15 @@
                     trustName = `${data.grantor1.toUpperCase()} LIVING TRUST`;
                 }
                 document.getElementById('trust-name').value = trustName;
+            }
+        }
+        
+        function usePropertyAsMailingAddress() {
+            const useProperty = document.getElementById('use-property-address').checked;
+            if (useProperty) {
+                document.getElementById('mailing-address').value = document.getElementById('property-address').value;
+                document.getElementById('mailing-city').value = document.getElementById('property-city').value;
+                document.getElementById('mailing-zip').value = document.getElementById('property-zip').value;
             }
         }
         
@@ -598,7 +728,7 @@
                 buyerZip: document.getElementById('mailing-zip').value || document.getElementById('property-zip').value,
                 sellerName: extractedDeedData.originalGrantor || document.getElementById('grantor1-name').value,
                 
-                // For PCOR
+                // For PCOR - defaults for trust transfer
                 transferDate: new Date().toISOString().split('T')[0],
                 principalResidence: 'yes',
                 disabledVeteran: 'no',
@@ -620,8 +750,11 @@
             document.getElementById('generate-success').style.display = 'none';
             document.getElementById('generate-error').style.display = 'none';
             
+            console.log('Generating trust deed with data:', documentData);
+            
             try {
-                const response = await fetch('/.netlify/functions/generate-trust-deed', {
+                // Use improved function
+                const response = await fetch('/.netlify/functions/generate-trust-deed-improved', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(documentData)
@@ -642,6 +775,8 @@
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('generate-error').style.display = 'block';
+                document.getElementById('generate-error').innerHTML = 
+                    `✗ Error generating document: ${error.message}`;
             }
         }
         
@@ -658,8 +793,11 @@
             document.getElementById('generate-success').style.display = 'none';
             document.getElementById('generate-error').style.display = 'none';
             
+            console.log('Generating PCOR for', county, 'with data:', documentData);
+            
             try {
-                const response = await fetch('/.netlify/functions/generate-pcor', {
+                // Use improved function
+                const response = await fetch('/.netlify/functions/generate-pcor-improved', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -685,6 +823,11 @@
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('generate-error').style.display = 'block';
+                document.getElementById('generate-error').innerHTML = 
+                    `✗ Error generating document: ${error.message}`;
+                if (error.stack) {
+                    console.error('Stack trace:', error.stack);
+                }
             }
         }
         
