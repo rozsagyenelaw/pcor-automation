@@ -33,26 +33,11 @@ exports.handler = async (event, context) => {
     const pdfData = await pdf(pdfBuffer);
     const text = pdfData.text;
     
-    console.log('PDF text extracted, first 500 chars:', text.substring(0, 500));
+    console.log('Extracted text length:', text.length);
+    console.log('First 1000 chars:', text.substring(0, 1000));
     
-    // Extract information with improved patterns
-    const grantee = extractGrantee(text);
-    const grantorNames = parseGranteeIntoGrantors(grantee);
-    const propertyAddress = extractPropertyAddress(text);
-    const apn = extractAPN(text);
-    const legalDesc = extractLegalDescription(text);
-    
-    const extractedInfo = {
-      grantee: grantee,
-      grantor1: grantorNames.grantor1,
-      grantor2: grantorNames.grantor2,
-      propertyAddress: propertyAddress,
-      propertyCity: extractCity(text, propertyAddress),
-      propertyZip: extractZip(text),
-      apn: apn,
-      legalDescription: legalDesc,
-      originalGrantor: extractOriginalGrantor(text),
-    };
+    // Use improved extraction methods
+    const extractedInfo = extractComprehensiveInfo(text);
     
     console.log('Extracted info:', JSON.stringify(extractedInfo, null, 2));
     
@@ -61,7 +46,8 @@ exports.handler = async (event, context) => {
       headers,
       body: JSON.stringify({
         success: true,
-        extractedInfo: extractedInfo
+        extractedInfo: extractedInfo,
+        rawText: text.substring(0, 2000) // Send first 2000 chars for debugging
       })
     };
   } catch (error) {
@@ -77,193 +63,323 @@ exports.handler = async (event, context) => {
   }
 };
 
-// Extract grantee - this becomes the grantor for trust deed
-function extractGrantee(text) {
-  const patterns = [
-    // Pattern for "GRANT(s) to NAME AND NAME" - FIXED closing parenthesis
-    /GRANT(?:S)?\s+to\s+([A-Z][A-Z\s\.\-]+?(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)\s*,?\s*(?:husband|wife|Husband|Wife|as\s+Joint\s+Tenants)?/mi,
-    // Pattern for "hereby GRANT to" - FIXED closing parenthesis
-    /hereby\s+GRANT(?:S)?\s+to\s+([A-Z][A-Z\s\.\-]+?(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)\s*,?\s*(?:husband|wife|Husband|Wife|as\s+Joint\s+Tenants)?/mi,
-    // Pattern with line breaks - FIXED closing parenthesis
-    /GRANT(?:S)?\s+to:?\s*\n?\s*([A-Z][A-Z\s\.\-]+?(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)\s*,?\s*(?:husband|wife|Husband|Wife|as\s+Joint\s+Tenants)?/mi
-  ];
+function extractComprehensiveInfo(text) {
+  // Clean up text for better matching
+  const cleanText = text.replace(/\s+/g, ' ').trim();
   
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      let grantee = match[1].trim();
-      // Clean up
-      grantee = grantee.replace(/\s+/g, ' ');
-      grantee = grantee.replace(/,?\s*$/, '');
-      console.log('Found grantee:', grantee);
-      return grantee;
-    }
+  const info = {
+    grantee: '',
+    grantor1: '',
+    grantor2: '',
+    propertyAddress: '',
+    propertyCity: '',
+    propertyState: 'CA',
+    propertyZip: '',
+    apn: '',
+    legalDescription: '',
+    originalGrantor: '',
+    recordingInfo: extractRecordingInfo(cleanText),
+    documentType: extractDocumentType(cleanText)
+  };
+  
+  // Extract names with multiple strategies
+  const names = extractNames(cleanText);
+  if (names.grantee) {
+    info.grantee = names.grantee;
+    const parsed = parseNameIntoTwo(names.grantee);
+    info.grantor1 = parsed.name1;
+    info.grantor2 = parsed.name2;
   }
   
-  // Try to find names after "GRANT to"
-  const grantIndex = text.search(/GRANT(?:S)?\s+to/i);
-  if (grantIndex !== -1) {
-    const afterGrant = text.substring(grantIndex + 10, grantIndex + 200);
-    console.log('Text after GRANT to:', afterGrant);
-    // Extract uppercase names
-    const nameMatch = afterGrant.match(/([A-Z][A-Z\s\.\-]+(?:\s+(?:AND|and)\s+[A-Z][A-Z\s\.\-]+)?)/);
-    if (nameMatch) {
-      return nameMatch[1].trim();
-    }
-  }
+  // Extract property info
+  const propInfo = extractPropertyInfo(cleanText);
+  Object.assign(info, propInfo);
   
-  return '';
+  // Extract APN with multiple patterns
+  info.apn = extractAPNComprehensive(cleanText);
+  
+  // Extract legal description
+  info.legalDescription = extractLegalDescComprehensive(cleanText);
+  
+  // Extract original grantor if available
+  info.originalGrantor = names.grantor || '';
+  
+  return info;
 }
 
-// Extract property address
-function extractPropertyAddress(text) {
-  const patterns = [
-    // Look for address with number and street
-    /([0-9]+\s+[A-Z][a-zA-Z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Boulevard|Blvd|Circle|Cir|Trail|Tr)\.?)\s*,?\s*([A-Za-z\s]+,?\s*CA)/i,
-    // Commonly known as
-    /Commonly\s+known\s+as:?\s*([0-9]+[^,\n]+)/i,
-    // After APN sometimes
-    /(?:property|real\s+property|described\s+as|located\s+at)[:\s]+([0-9]+[^,\n]+)/i
+function extractNames(text) {
+  const result = { grantor: '', grantee: '' };
+  
+  // Strategy 1: Look for "GRANT to" pattern
+  const grantToPatterns = [
+    /(?:hereby\s+)?GRANTS?\s+to[:;\s]+([A-Z][A-Za-z\s,\.]+?)(?:\s*,\s*(?:a|an|as|husband|wife|married|single|unmarried))/i,
+    /(?:hereby\s+)?GRANTS?\s+to[:;\s]+([A-Z][A-Za-z\s,\.]+?)\s*(?:,|\n|$)/i,
+    /to\s+([A-Z][A-Z\s\.]+(?:AND|and|&)\s+[A-Z][A-Z\s\.]+)/,
+    /Grantee[:;\s]+([A-Za-z\s,\.]+?)(?:\n|,\s*a)/i
   ];
   
-  for (const pattern of patterns) {
+  for (const pattern of grantToPatterns) {
     const match = text.match(pattern);
     if (match) {
-      const address = match[1].trim();
-      console.log('Found property address:', address);
-      return address;
+      result.grantee = cleanName(match[1]);
+      console.log('Found grantee with pattern:', result.grantee);
+      break;
     }
   }
-  return '';
+  
+  // Strategy 2: Look for grantor patterns
+  const grantorPatterns = [
+    /^([A-Z][A-Za-z\s,\.]+?)\s+(?:hereby\s+)?GRANTS?/mi,
+    /Grantor[:;\s]+([A-Za-z\s,\.]+?)(?:\n|,\s*a)/i,
+    /FOR\s+(?:A\s+)?VALUABLE\s+CONSIDERATION[^,]*,\s*([A-Z][A-Za-z\s,\.]+?)\s+(?:hereby|GRANT)/i
+  ];
+  
+  for (const pattern of grantorPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      result.grantor = cleanName(match[1]);
+      console.log('Found grantor with pattern:', result.grantor);
+      break;
+    }
+  }
+  
+  // Strategy 3: Look for structured name blocks
+  if (!result.grantee) {
+    // Look for names after "WHEN RECORDED MAIL TO"
+    const mailToMatch = text.match(/WHEN\s+RECORDED\s+MAIL\s+TO[:;\s]+([A-Za-z\s,\.]+?)(?:\n|,)/i);
+    if (mailToMatch) {
+      const possibleName = cleanName(mailToMatch[1]);
+      if (possibleName && possibleName.length > 5) {
+        result.grantee = possibleName;
+        console.log('Found grantee from mail-to section:', result.grantee);
+      }
+    }
+  }
+  
+  return result;
 }
 
-// Extract APN
-function extractAPN(text) {
+function extractPropertyInfo(text) {
+  const info = {
+    propertyAddress: '',
+    propertyCity: '',
+    propertyZip: ''
+  };
+  
+  // Extract address
+  const addressPatterns = [
+    // Standard address with street type
+    /(\d+\s+[A-Za-z\s]+?(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Boulevard|Blvd|Circle|Cir|Parkway|Pkwy|Trail|Path)\.?)(?:\s*,\s*([A-Za-z\s]+?))?(?:\s*,\s*CA)?(?:\s+(\d{5}))?/i,
+    // "Commonly known as" pattern
+    /Commonly\s+known\s+as[:;\s]+([^\n]+?)(?:\n|$)/i,
+    // "Real property" pattern
+    /(?:Real\s+property|Property)\s+(?:located\s+)?(?:at|in)[:;\s]+([^\n]+?)(?:\n|$)/i,
+    // Property address label
+    /Property\s+Address[:;\s]+([^\n]+?)(?:\n|$)/i
+  ];
+  
+  for (const pattern of addressPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      info.propertyAddress = cleanAddress(match[1]);
+      if (match[2]) info.propertyCity = cleanCity(match[2]);
+      if (match[3]) info.propertyZip = match[3];
+      console.log('Found property address:', info.propertyAddress);
+      break;
+    }
+  }
+  
+  // Try to extract city if not found
+  if (!info.propertyCity) {
+    const cityPatterns = [
+      /(?:City\s+of\s+)([A-Za-z\s]+?)(?:,|\s+County)/i,
+      /([A-Za-z\s]+?),\s*CA\s+\d{5}/i,
+      /in\s+([A-Za-z\s]+?)\s+County/i
+    ];
+    
+    for (const pattern of cityPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        info.propertyCity = cleanCity(match[1]);
+        console.log('Found city:', info.propertyCity);
+        break;
+      }
+    }
+  }
+  
+  // Extract ZIP if not found
+  if (!info.propertyZip) {
+    const zipMatch = text.match(/\b(9\d{4})\b/);
+    if (zipMatch) {
+      info.propertyZip = zipMatch[1];
+      console.log('Found ZIP:', info.propertyZip);
+    }
+  }
+  
+  return info;
+}
+
+function extractAPNComprehensive(text) {
   const patterns = [
-    // Standard format XXX-XXX-XX
-    /(?:APN|A\.P\.N\.?|Assessor'?s?\s+Parcel\s+Number)[:\s]*([\d]{3}[\-\s][\d]{3}[\-\s][\d]{2,3})/i,
-    // With different separators
-    /(?:APN|Parcel\s+No\.?)[:\s]*([\d]{3}[\-\s][\d]{3}[\-\s][\d]{2,3})/i,
-    // Order No that might be APN
-    /(?:Order\s+No\.?|APN)[:\s]*([\d]{3}[\-\s][\d]{3}[\-\s][\d]{2,3})/i
+    // Standard APN formats
+    /(?:APN|A\.P\.N\.|Assessor'?s?\s+Parcel\s+(?:Number|No\.?))[:;\s]*([\d]{3,4}[-\s][\d]{3,4}[-\s][\d]{2,3})/i,
+    /(?:Parcel\s+(?:Number|No\.?))[:;\s]*([\d]{3,4}[-\s][\d]{3,4}[-\s][\d]{2,3})/i,
+    // Sometimes appears as just numbers
+    /\b([\d]{3,4}[-\s][\d]{3,4}[-\s][\d]{2,3})\b/,
+    // May have different separators
+    /(?:APN)[:;\s]*([\d]{3,4}[\s\-\.]+[\d]{3,4}[\s\-\.]+[\d]{2,3})/i
   ];
   
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
-      const apn = match[1].replace(/\s/g, '-');
+      const apn = match[1].replace(/[\s\.]+/g, '-');
       console.log('Found APN:', apn);
       return apn;
     }
   }
   
-  // Try finding any XXX-XXX-XX pattern
-  const genericPattern = /\b([\d]{3}[\-\s][\d]{3}[\-\s][\d]{2,3})\b/;
-  const match = text.match(genericPattern);
-  if (match) {
-    return match[1].replace(/\s/g, '-');
-  }
-  
   return '';
 }
 
-// Extract legal description
-function extractLegalDescription(text) {
+function extractLegalDescComprehensive(text) {
   const patterns = [
-    // Lot X of Tract No. XXXX
-    /(Lot\s+[\d]+\s+of\s+Tract\s+No\.?\s*[\d]+[^\.]*(?:Book|Page)[^\.]*\.)/i,
-    // Simpler Lot of Tract
-    /(Lot\s+[\d]+\s+of\s+Tract\s+(?:No\.?\s*)?[\d]+[^\.]*\.)/i,
-    // After "described as"
-    /(?:described\s+as|legal\s+description)[:\s]*([^\.]+\.)/i,
-    // COMPLETE LEGAL DESCRIPTION
-    /(?:COMPLETE\s+)?LEGAL\s+DESCRIPTION[:\s]*([^\.]+\.)/i
+    // Lot and Tract patterns
+    /(Lot\s+\d+[^\.]*?Tract\s+(?:No\.?\s*)?\d+[^\.]*?(?:Book|Page|recorded)[^\.]*?\.)/i,
+    // Lot/Block patterns
+    /(Lot\s+\d+[^\.]*?Block\s+\d+[^\.]*?\.)/i,
+    // Legal description section
+    /Legal\s+Description[:;\s]+([^\.]+(?:\.[^\.]+){0,2}\.)/i,
+    // Described as section
+    /(?:described\s+as|more\s+particularly\s+described\s+as)[:;\s]+([^\.]+(?:\.[^\.]+){0,2}\.)/i,
+    // Full legal description block
+    /(?:LEGAL\s+DESCRIPTION|EXHIBIT\s+[A-Z])[\s\S]{0,50}?((?:Lot|Parcel|Tract|That\s+certain)[^\.]+(?:\.[^\.]+){0,3}\.)/i
   ];
   
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
-      const desc = match[1] || match[0];
-      console.log('Found legal description:', desc);
-      return desc.trim();
+      const desc = cleanLegalDescription(match[1] || match[0]);
+      console.log('Found legal description:', desc.substring(0, 100));
+      return desc;
     }
   }
+  
   return '';
 }
 
-// Extract city from text or address
-function extractCity(text, address) {
-  // Try to extract from address first
-  if (address) {
-    const addressParts = address.split(',');
-    if (addressParts.length > 1) {
-      return addressParts[1].trim().replace(/,?\s*CA.*$/, '');
-    }
+function extractRecordingInfo(text) {
+  const info = {};
+  
+  // Recording date
+  const dateMatch = text.match(/(?:Recorded|Recording\s+Date)[:;\s]+(\w+\s+\d{1,2},?\s+\d{4})/i);
+  if (dateMatch) {
+    info.recordingDate = dateMatch[1];
   }
   
-  // Look for city patterns
-  const patterns = [
-    /(?:City\s+of\s+)([A-Za-z\s]+?)(?:,|\s+County)/i,
-    /([A-Za-z\s]+?),\s*CA\s+9\d{4}/i
-  ];
-  
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      return match[1].trim();
-    }
+  // Document/Instrument number
+  const docMatch = text.match(/(?:Document|Instrument)\s+(?:Number|No\.?)[:;\s]+([\d\-]+)/i);
+  if (docMatch) {
+    info.documentNumber = docMatch[1];
   }
-  return '';
+  
+  return info;
 }
 
-// Extract ZIP code
-function extractZip(text) {
-  const pattern = /\b(9\d{4})\b/;
-  const match = text.match(pattern);
-  return match ? match[1] : '';
-}
-
-// Extract original grantor
-function extractOriginalGrantor(text) {
-  const patterns = [
-    /FOR\s+A\s+VALUABLE\s+CONSIDERATION[^,]*,\s*([A-Z][A-Z\s\.\-]+(?:\s+and\s+[A-Z][A-Z\s\.\-]+)?)/i,
-    /^\s*([A-Z][A-Z\s\.\-]+(?:\s+and\s+[A-Z][A-Z\s\.\-]+)?)\s+hereby\s+GRANT/mi
+function extractDocumentType(text) {
+  const types = [
+    'GRANT DEED',
+    'WARRANTY DEED',
+    'QUITCLAIM DEED',
+    'TRUST DEED',
+    'DEED OF TRUST',
+    'INTERSPOUSAL TRANSFER DEED'
   ];
   
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      let grantor = match[1].trim();
-      grantor = grantor.replace(/,?\s*(?:husband|wife|Husband|Wife).*$/i, '').trim();
-      return grantor;
-    }
-  }
-  return '';
-}
-
-// Parse grantee into two grantors
-function parseGranteeIntoGrantors(grantee) {
-  if (!grantee) return { grantor1: '', grantor2: '' };
-  
-  // Look for AND between names
-  const andPatterns = [
-    /^(.+?)\s+(?:AND|and)\s+(.+)$/,
-    /^([A-Z\s\.\-]+)\s+(?:AND|and)\s+([A-Z\s\.\-]+)$/
-  ];
-  
-  for (const pattern of andPatterns) {
-    const match = grantee.match(pattern);
-    if (match) {
-      return {
-        grantor1: match[1].trim(),
-        grantor2: match[2].trim()
-      };
+  for (const type of types) {
+    if (text.toUpperCase().includes(type)) {
+      return type;
     }
   }
   
-  // No AND found, put all in grantor1
+  return 'DEED';
+}
+
+function parseNameIntoTwo(fullName) {
+  if (!fullName) return { name1: '', name2: '' };
+  
+  // Clean the name first
+  fullName = fullName.trim();
+  
+  // Look for AND, and, or & separators
+  const separators = [
+    /\s+AND\s+/i,
+    /\s+&\s+/,
+    /\s*,\s+/
+  ];
+  
+  for (const sep of separators) {
+    if (sep.test(fullName)) {
+      const parts = fullName.split(sep);
+      if (parts.length >= 2) {
+        return {
+          name1: cleanName(parts[0]),
+          name2: cleanName(parts[1])
+        };
+      }
+    }
+  }
+  
+  // Check if it's a couple with same last name
+  const words = fullName.split(/\s+/);
+  if (words.length >= 4) {
+    // Might be "FIRST1 LAST and FIRST2 LAST" format
+    const midPoint = Math.floor(words.length / 2);
+    return {
+      name1: words.slice(0, midPoint).join(' '),
+      name2: words.slice(midPoint).join(' ')
+    };
+  }
+  
+  // Single name
   return {
-    grantor1: grantee,
-    grantor2: ''
+    name1: fullName,
+    name2: ''
   };
+}
+
+// Helper functions
+function cleanName(name) {
+  if (!name) return '';
+  return name
+    .replace(/\s+/g, ' ')
+    .replace(/,\s*$/, '')
+    .replace(/\b(husband|wife|married|single|unmarried|trustee|successor|trust)\b.*/i, '')
+    .trim();
+}
+
+function cleanAddress(address) {
+  if (!address) return '';
+  return address
+    .replace(/\s+/g, ' ')
+    .replace(/,\s*$/, '')
+    .trim();
+}
+
+function cleanCity(city) {
+  if (!city) return '';
+  return city
+    .replace(/\s+/g, ' ')
+    .replace(/,.*$/, '')
+    .replace(/\s*County.*$/i, '')
+    .trim();
+}
+
+function cleanLegalDescription(desc) {
+  if (!desc) return '';
+  return desc
+    .replace(/\s+/g, ' ')
+    .replace(/\n/g, ' ')
+    .substring(0, 500)
+    .trim();
 }
