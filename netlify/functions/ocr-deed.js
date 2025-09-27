@@ -278,16 +278,10 @@ function extractAPNComprehensive(text) {
 
 function extractLegalComprehensive(text) {
   const patterns = [
-    // Primary pattern - after "State of CA, described as:"
-    /State\s+of\s+CA,?\s+described\s+as:\s*([^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
-    // Alternative - after "County of ... State of CA, described as:"
-    /County\s+of\s+[^,]+,?\s+State\s+of\s+CA,?\s+described\s+as:\s*([^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
-    // Another variation - "the CITY OF"
-    /the\s+CITY\s+OF\s+[^,]+,?\s+County\s+of\s+[^,]+,?\s+State\s+of\s+CA,?\s+described\s+as:\s*([^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
-    // PARCEL format (as fallback)
-    /(PARCEL\s+\d+:[^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
-    // Lot and Tract (fallback)
+    // Lot and Tract
     /(Lot\s+\d+[^\.]*?(?:Tract|Block)\s+(?:No\.?\s*)?\d+[^\.]*?(?:\.|(?=\n\n)))/is,
+    // Parcel description
+    /(Parcel\s+\d+[^\.]*?(?:\.|(?=\n\n)))/is,
     // Legal description section
     /(?:Legal\s+Description|LEGAL\s+DESCRIPTION)[:;\s]+([^\.]+(?:\.[^\.]+){0,2}\.)/is,
     // Real property described as
@@ -299,11 +293,9 @@ function extractLegalComprehensive(text) {
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match && match[1]) {
-      let desc = match[1].replace(/\s+/g, ' ').replace(/\n/g, ' ').trim();
-      // Keep up to 2000 characters for complex legal descriptions
-      desc = desc.substring(0, 2000);
-      if (desc && desc.length > 10) { // Make sure we got something substantial
-        console.log('Found legal description:', desc.substring(0, 100) + '...');
+      const desc = cleanLegalDescription(match[1]);
+      if (desc) {
+        console.log('Found legal description:', desc.substring(0, 100));
         return desc;
       }
     }
@@ -444,6 +436,6 @@ function cleanLegalDescription(desc) {
   return desc
     .replace(/\s+/g, ' ')
     .replace(/\n/g, ' ')
-    .substring(0, 2000)  // Changed from 500 to 2000
+    .substring(0, 500)
     .trim();
 }
