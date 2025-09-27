@@ -1,463 +1,476 @@
-const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-const fetch = require('node-fetch');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+
+function formatDate(dateString) {
+  if (!dateString) return {};
+  const date = new Date(dateString);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const year = date.getFullYear().toString();
+  return { month, day, year, full: month + '/' + day + '/' + year };
+}
+
+function formatCurrency(value) {
+  if (!value) return "";
+  const num = parseFloat(value.toString().replace(/[^0-9.-]/g, ''));
+  return num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+async function loadPDFTemplate(county) {
+  const fetch = (await import('node-fetch')).default;
+  
+  const templateMap = {
+    'los-angeles': 'preliminary-change-of-ownership%20(1).pdf',
+    'ventura': 'VENTURA%20County%20Form%20BOE-502-A%20for%202022%20(14).pdf',
+    'orange': 'ORANGE%20County%20Form%20BOE-502-A%20for%202021%20(18).pdf',
+    'san-bernardino': 'SAN_BERNARDINO%20County%20Form%20BOE-502-A%20for%202025%20(23).pdf',
+    'riverside': 'RIVERSIDE%20County%20Form%20BOE-502-A%20for%202018%20(6).pdf'
+  };
+  
+  const templateFile = templateMap[county];
+  if (!templateFile) {
+    throw new Error('Unknown county: ' + county);
+  }
+  
+  const url = `https://pcorautomation.netlify.app/templates/${templateFile}`;
+  
+  try {
+    console.log('Loading template for ' + county + ' from: ' + url);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Failed to load template: ' + response.statusText);
+    }
+    const buffer = await response.buffer();
+    console.log('Successfully loaded template (' + buffer.length + ' bytes)');
+    return buffer;
+  } catch (error) {
+    console.error('Error loading template for ' + county + ':', error);
+    throw error;
+  }
+}
+
+async function fillPCORForm(data, pdfBytes, county) {
+  try {
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const form = pdfDoc.getForm();
+    const fields = form.getFields();
+    
+    console.log('Form has ' + fields.length + ' fields');
+    
+    // Log all field names for debugging
+    const fieldInfo = fields.map(field => ({
+      name: field.getName(),
+      type: field.constructor.name
+    }));
+    console.log('All fields:', JSON.stringify(fieldInfo, null, 2));
+    
+    const dateInfo = formatDate(data.transferDate);
+    
+    // Build complete addresses
+    const buyerFullAddress = data.buyerAddress ? 
+      `${data.buyerAddress}\n${data.buyerCity || ''}, ${data.buyerState || 'CA'} ${data.buyerZip || ''}` : '';
+    
+    const propertyFullAddress = data.propertyAddress ? 
+      `${data.propertyAddress}, ${data.propertyCity || ''}, ${data.propertyState || 'CA'} ${data.propertyZip || ''}` : '';
+    
+    // Fill text fields - comprehensive list
+    const textFieldMappings = createTextFieldMappings(data, {
+      dateInfo,
+      buyerFullAddress,
+      propertyFullAddress
+    });
+    
+    fillTextFields(form, fields, textFieldMappings);
+    
+    // Handle checkboxes with CORRECTED logic based on actual checkbox names
+    await handlePCORCheckboxes(form, fields, data);
+    
+    const pdfBytesResult = await pdfDoc.save();
+    return pdfBytesResult;
+    
+  } catch (error) {
+    console.error('Error filling PCOR form:', error);
+    throw error;
+  }
+}
+
+function createTextFieldMappings(data, computed) {
+  // Create comprehensive field mappings with variations
+  return {
+    // Buyer/Transferee Information - Multiple variations
+    'NAME AND MAILING ADDRESS OF BUYER/TRANSFEREE': `${data.buyerName}\n${computed.buyerFullAddress}`,
+    'Name and mailing address of buyer/transferee': `${data.buyerName}\n${computed.buyerFullAddress}`,
+    'NAME AND MAILING ADDRESS OF BUYERTRANSFEREE': `${data.buyerName}\n${computed.buyerFullAddress}`,
+    'Buyer Name': data.buyerName,
+    'BuyerName': data.buyerName,
+    'Text1': `${data.buyerName}\n${computed.buyerFullAddress}`,
+    
+    // APN variations
+    'ASSESSOR\'S PARCEL NUMBER': data.apn,
+    'Assessors parcel number': data.apn,
+    'ASSESSORS PARCEL NUMBER': data.apn,
+    'APN': data.apn,
+    'apn': data.apn,
+    'ParcelNumber': data.apn,
+    'Text2': data.apn,
+    
+    // Seller/Transferor variations
+    'SELLER/TRANSFEROR': data.sellerName,
+    'SELLERTRANSFEROR': data.sellerName,
+    'seller transferor': data.sellerName,
+    'Seller': data.sellerName,
+    'SellerName': data.sellerName,
+    'Text3': data.sellerName,
+    
+    // Phone and Email
+    'BUYER\'S DAYTIME TELEPHONE NUMBER': data.buyerPhone,
+    'BUYERS DAYTIME TELEPHONE NUMBER': data.buyerPhone,
+    'buyer\'s daytime telephone number': data.buyerPhone,
+    'buyer\'s daytime telephone number1': data.buyerPhone,
+    'Phone': data.buyerPhone,
+    'area code': data.buyerAreaCode,
+    'AreaCode': data.buyerAreaCode,
+    
+    'BUYER\'S EMAIL ADDRESS': data.buyerEmail,
+    'BUYERS EMAIL ADDRESS': data.buyerEmail,
+    'Buyer\'s email address': data.buyerEmail,
+    'Email': data.buyerEmail,
+    
+    // Property Address variations
+    'STREET ADDRESS OR PHYSICAL LOCATION OF REAL PROPERTY': computed.propertyFullAddress,
+    'street address or physical location of real property': computed.propertyFullAddress,
+    'Property Address': computed.propertyFullAddress,
+    'PropertyAddress': computed.propertyFullAddress,
+    'Text4': computed.propertyFullAddress,
+    
+    // Date fields - multiple formats
+    'MO': computed.dateInfo.month,
+    'Month': computed.dateInfo.month,
+    'MONTH': computed.dateInfo.month,
+    'mo': computed.dateInfo.month,
+    
+    'DAY': computed.dateInfo.day,
+    'Day': computed.dateInfo.day,
+    'day': computed.dateInfo.day,
+    
+    'YEAR': computed.dateInfo.year,
+    'Year': computed.dateInfo.year,
+    'year': computed.dateInfo.year,
+    'YR': computed.dateInfo.year.substring(2),
+    
+    // Mail Property Tax Information
+    'MAIL PROPERTY TAX INFORMATION TO (NAME)': data.buyerName,
+    'MAIL PROPERTY TAX INFORMATION TO NAME': data.buyerName,
+    'mail property tax information to (name)': data.buyerName,
+    'MailTaxName': data.buyerName,
+    
+    'MAIL PROPERTY TAX INFORMATION TO (ADDRESS)': data.mailingAddress || data.buyerAddress,
+    'MAIL PROPERTY TAX INFORMATION TO ADDRESS': data.mailingAddress || data.buyerAddress,
+    'Mail property tax informatino to address': data.mailingAddress || data.buyerAddress,
+    'MailTaxAddress': data.mailingAddress || data.buyerAddress,
+    
+    'CITY': data.mailingCity || data.buyerCity || data.propertyCity,
+    'City': data.mailingCity || data.buyerCity || data.propertyCity,
+    'city': data.mailingCity || data.buyerCity || data.propertyCity,
+    
+    'STATE': data.mailingState || data.buyerState || 'CA',
+    'State': data.mailingState || data.buyerState || 'CA',
+    'state': data.mailingState || data.buyerState || 'CA',
+    'ST': data.mailingState || data.buyerState || 'CA',
+    
+    'ZIP CODE': data.mailingZip || data.buyerZip || data.propertyZip,
+    'ZIP': data.mailingZip || data.buyerZip || data.propertyZip,
+    'Zip': data.mailingZip || data.buyerZip || data.propertyZip,
+    'ZipCode': data.mailingZip || data.buyerZip || data.propertyZip,
+    
+    // Financial Information
+    'Total purchase price': formatCurrency(data.purchasePrice),
+    'TotalPurchasePrice': formatCurrency(data.purchasePrice),
+    'Purchase Price': formatCurrency(data.purchasePrice),
+    
+    'Cash down payment or value of trade or exchange excluding closing costs': formatCurrency(data.downPayment),
+    'Cash down payment or value of trade or exchange excluding closing costs amount $': formatCurrency(data.downPayment),
+    'Down Payment': formatCurrency(data.downPayment),
+    'DownPayment': formatCurrency(data.downPayment),
+    
+    'First deed of trust amount': formatCurrency(data.firstLoan),
+    'First deed of trust @': data.firstLoanInterest,
+    'First deed of trust interest': data.firstLoanInterest,
+    'First deed of trust interest first deed of trust': data.firstLoanInterest,
+    'First deed of trust interest for': data.firstLoanTerm,
+    'First deed of trust interest for interest': data.firstLoanTerm,
+    'First deed of trust monthly payment': formatCurrency(data.firstLoanPayment),
+    
+    'Second deed of trust amount': formatCurrency(data.secondLoan),
+    'D. Second deed of trust amount': formatCurrency(data.secondLoan),
+    'D. Second deed of trust @': data.secondLoanInterest,
+    'D. Second deed of trust interest for': data.secondLoanTerm,
+    'D. Second deed of trust monthly payment': formatCurrency(data.secondLoanPayment),
+    
+    'Balloon payment amount': formatCurrency(data.balloonAmount),
+    'C. Balloon payment amount': formatCurrency(data.balloonAmount),
+    'C. Balloon payment due date': data.balloonDueDate,
+    'D. Balloon payment_2': formatCurrency(data.secondBalloonAmount),
+    'D. Balloon payment due date': data.secondBalloonDueDate,
+    
+    'Outstanding balance': formatCurrency(data.outstandingBalance),
+    'E. Outstanding balance': formatCurrency(data.outstandingBalance),
+    
+    'Amount, if any, of real estate commissino fees paid by the buyer which are not included in the purchase price': formatCurrency(data.commissionFees),
+    'F. Amount, if any, of real estate commissino fees paid by the buyer which are not included in the purchase price': formatCurrency(data.commissionFees),
+    'Commission Fees': formatCurrency(data.commissionFees),
+    
+    'G. broker name': data.brokerName,
+    'Broker Name': data.brokerName,
+    'G. area code2': data.brokerAreaCode,
+    'G. brokers telephone number': data.brokerPhone,
+    'Broker Phone': data.brokerPhone,
+    
+    // Signature Section
+    'Name of buyer/transferee/personal representative/corporate officer (please print)': data.buyerName + ' as Trustee',
+    'Name of buyer transferee personal representative corporate officer please print': data.buyerName + ' as Trustee',
+    'SignatureName': data.buyerName + ' as Trustee',
+    
+    'title': 'Trustee',
+    'Title': 'Trustee',
+    
+    'Date signed by buyer/transferee or corporate officer': data.signatureDate || formatDate(new Date()).full,
+    'Date signed by buyer transferee or corporate officer': data.signatureDate || formatDate(new Date()).full,
+    'SignatureDate': data.signatureDate || formatDate(new Date()).full,
+    
+    'email address': data.signatureEmail || data.buyerEmail,
+    'Email Address': data.signatureEmail || data.buyerEmail,
+    
+    'area code3': data.signatureAreaCode || data.buyerAreaCode,
+    'telephone number of buyer/transferee or corporate officer': data.signaturePhone || data.buyerPhone,
+    'Buyer/transferee/legal representative telephone number': data.signaturePhone || data.buyerPhone,
+    'Buyer transferee legal representative telephone number': data.signaturePhone || data.buyerPhone,
+  };
+}
+
+function fillTextFields(form, fields, mappings) {
+  let filledCount = 0;
+  
+  for (const [fieldName, value] of Object.entries(mappings)) {
+    if (!value) continue;
+    
+    // Try exact match
+    try {
+      const field = form.getTextField(fieldName);
+      field.setText(value.toString());
+      console.log(`✓ Filled text field: "${fieldName}"`);
+      filledCount++;
+      continue;
+    } catch (e) {
+      // Not found with exact name
+    }
+    
+    // Try case-insensitive match
+    const foundField = fields.find(field => {
+      const name = field.getName();
+      return name && 
+             name.toLowerCase() === fieldName.toLowerCase() && 
+             field.constructor.name.includes('TextField');
+    });
+    
+    if (foundField) {
+      try {
+        const textField = form.getTextField(foundField.getName());
+        textField.setText(value.toString());
+        console.log(`✓ Filled text field (case-insensitive): "${foundField.getName()}"`);
+        filledCount++;
+      } catch (e) {
+        console.log(`✗ Could not fill field: "${foundField.getName()}"`);
+      }
+    }
+  }
+  
+  console.log(`Filled ${filledCount} text fields`);
+}
+
+async function handlePCORCheckboxes(form, fields, data) {
+  const checkboxes = fields.filter(field => 
+    field.constructor.name.includes('PDFCheckBox') || 
+    field.constructor.name.includes('CheckBox')
+  );
+  
+  console.log(`Found ${checkboxes.length} total checkboxes`);
+  
+  // Based on the actual checkbox names from your debug output, we need to find:
+  // 1. Principal Residence YES
+  // 2. Disabled Veteran NO  
+  // 3. Section L.1 YES (revocable trust)
+  
+  let principalResChecked = false;
+  let veteranNoChecked = false;
+  let sectionL1Checked = false;
+  
+  checkboxes.forEach((checkbox, index) => {
+    const name = checkbox.getName() || '';
+    const lowerName = name.toLowerCase();
+    
+    try {
+      const cb = form.getCheckBox(name);
+      
+      // Principal Residence YES - look for the YES version
+      if (lowerName.includes('principal residence') && 
+          lowerName.includes('yes') && 
+          !lowerName.includes('_no')) {
+        cb.check();
+        console.log(`✓ CHECKED Principal Residence YES at index ${index}: "${name}"`);
+        principalResChecked = true;
+      }
+      // Disabled Veteran NO
+      else if (lowerName.includes('disabled veteran') && 
+               lowerName.includes('no')) {
+        cb.check();
+        console.log(`✓ CHECKED Disabled Veteran NO at index ${index}: "${name}"`);
+        veteranNoChecked = true;
+      }
+      // Section L.1 YES - look for revocable trust
+      else if ((lowerName.includes('l1') && lowerName.includes('revocable trust') && lowerName.includes('yes')) ||
+               (lowerName.includes('l1.') && lowerName.includes('transfer') && lowerName.includes('revocable')) ||
+               (lowerName.includes('this is a transfer of property') && 
+                lowerName.includes('revocable trust') && 
+                lowerName.includes('transferor') && 
+                lowerName.includes('yes'))) {
+        cb.check();
+        console.log(`✓ CHECKED Section L.1 YES at index ${index}: "${name}"`);
+        sectionL1Checked = true;
+      }
+      // Uncheck everything else
+      else {
+        cb.uncheck();
+        console.log(`✗ UNCHECKED checkbox at index ${index}: "${name}"`);
+      }
+    } catch (e) {
+      console.log(`Error processing checkbox at index ${index}: ${e.message}`);
+    }
+  });
+  
+  // If we didn't find the correct checkboxes by name, try by specific indices based on your debug output
+  if (!principalResChecked || !veteranNoChecked || !sectionL1Checked) {
+    console.log('Some checkboxes not found by name, attempting manual selection...');
+    
+    // From your debug output:
+    // Index 1: "This property is intended as my principal residence... Yes"
+    // Index 104: "Are you a disabled veteran... No"
+    // Index 80: "L1. This is a transfer of property to/from a revocable trust... Yes"
+    
+    if (!principalResChecked && checkboxes[1]) {
+      try {
+        const cb = form.getCheckBox(checkboxes[1].getName());
+        cb.check();
+        console.log(`✓ CHECKED Principal Residence YES at index 1 (fallback)`);
+        principalResChecked = true;
+      } catch (e) {}
+    }
+    
+    if (!veteranNoChecked && checkboxes[104]) {
+      try {
+        const cb = form.getCheckBox(checkboxes[104].getName());
+        cb.check();
+        console.log(`✓ CHECKED Disabled Veteran NO at index 104 (fallback)`);
+        veteranNoChecked = true;
+      } catch (e) {}
+    }
+    
+    if (!sectionL1Checked && checkboxes[80]) {
+      try {
+        const cb = form.getCheckBox(checkboxes[80].getName());
+        cb.check();
+        console.log(`✓ CHECKED Section L.1 YES at index 80 (fallback)`);
+        sectionL1Checked = true;
+      } catch (e) {}
+    }
+  }
+  
+  // Report final status
+  const totalChecked = (principalResChecked ? 1 : 0) + 
+                       (veteranNoChecked ? 1 : 0) + 
+                       (sectionL1Checked ? 1 : 0);
+  
+  console.log('=== CHECKBOX SUMMARY ===');
+  console.log(`Principal Residence YES: ${principalResChecked ? '✓' : '✗'}`);
+  console.log(`Disabled Veteran NO: ${veteranNoChecked ? '✓' : '✗'}`);
+  console.log(`Section L.1 YES: ${sectionL1Checked ? '✓' : '✗'}`);
+  console.log(`Total checked: ${totalChecked}/3`);
+  
+  if (totalChecked !== 3) {
+    console.warn('WARNING: Did not check exactly 3 boxes as expected for trust transfer');
+  }
+  
+  return totalChecked;
+}
 
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
   };
-
+  
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+    return {
+      statusCode: 200,
+      headers,
+      body: ''
+    };
   }
-
+  
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
   }
-
+  
   try {
     const data = JSON.parse(event.body);
-    console.log('Received data for trust deed:', data);
+    console.log('Received PCOR data for county:', data.county);
+    console.log('Form data keys:', Object.keys(data));
     
-    // Load template
-    const templateUrl = 'https://pcorautomation.netlify.app/templates/trust-transfer-deed-template.pdf';
-    const response = await fetch(templateUrl);
+    // Set defaults for trust transfer
+    if (!data.principalResidence) data.principalResidence = 'yes';
+    if (!data.disabledVeteran) data.disabledVeteran = 'no';
     
-    if (!response.ok) {
-      throw new Error('Failed to load template: ' + response.statusText);
+    // Ensure we have complete address data
+    if (!data.buyerAddress && data.propertyAddress) {
+      data.buyerAddress = data.propertyAddress;
+      data.buyerCity = data.propertyCity;
+      data.buyerState = data.propertyState || 'CA';
+      data.buyerZip = data.propertyZip;
     }
     
-    const templateBytes = await response.buffer();
-    const pdfDoc = await PDFDocument.load(templateBytes);
+    const pdfBytes = await loadPDFTemplate(data.county);
+    console.log('PDF template loaded successfully');
     
-    // Check if form exists
-    const form = pdfDoc.getForm();
-    const fields = form.getFields();
+    const filledPdfBytes = await fillPCORForm(data, pdfBytes, data.county);
+    console.log('PDF form filled successfully');
     
-    console.log('Template has ' + fields.length + ' fields');
-    console.log('Field names:', fields.map(f => ({
-      name: f.getName(),
-      type: f.constructor.name
-    })));
-    
-    // Format dates
-    const today = new Date();
-    const dateStr = formatDate(today);
-    const trustDate = data.trustDate ? formatDate(new Date(data.trustDate)) : dateStr;
-    
-    // Build trust name
-    const trustName = data.trustName || buildTrustName(data.grantor1Name, data.grantor2Name);
-    
-    // Build complete names and addresses
-    const grantorNames = buildGrantorNames(data);
-    const trusteeNames = buildTrusteeNames(data, trustName, trustDate);
-    const mailingInfo = buildMailingInfo(data);
-    
-    // If no form fields, create text overlay with FIXED positioning
-    if (fields.length === 0) {
-      console.log('No form fields found, creating text overlay');
-      await addTextOverlay(pdfDoc, {
-        grantorNames,
-        trusteeNames,
-        trustName,
-        propertyAddress: data.propertyAddress,
-        propertyCity: data.propertyCity,
-        propertyZip: data.propertyZip,
-        apn: data.apn,
-        legalDescription: data.legalDescription,
-        mailingInfo,
-        dateStr
-      });
-    } else {
-      // Fill form fields with multiple name variations
-      const fieldMappings = createFieldMappings(data, {
-        trustName,
-        grantorNames,
-        trusteeNames,
-        mailingInfo,
-        dateStr,
-        trustDate
-      });
-      
-      let filledCount = fillFormFields(form, fields, fieldMappings);
-      
-      // Also try checkbox fields for transfer type
-      filledCount += handleCheckboxes(form, fields, data);
-      
-      console.log(`Filled ${filledCount} fields`);
-    }
-    
-    const pdfBytes = await pdfDoc.save();
-    const base64 = Buffer.from(pdfBytes).toString('base64');
+    const base64 = Buffer.from(filledPdfBytes).toString('base64');
+    const dataUrl = 'data:application/pdf;base64,' + base64;
     
     return {
       statusCode: 200,
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         success: true,
-        pdfUrl: `data:application/pdf;base64,${base64}`,
-        message: `Trust deed generated successfully`
+        pdfUrl: dataUrl,
+        message: 'PCOR form for ' + data.county + ' generated successfully'
       })
     };
   } catch (error) {
-    console.error('Error generating trust deed:', error);
+    console.error('Error generating PCOR:', error);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
-        error: 'Failed to generate trust deed',
-        details: error.message 
+      body: JSON.stringify({
+        error: 'Failed to generate PCOR form',
+        details: error.message,
+        stack: error.stack
       })
     };
   }
 };
-
-function formatDate(date) {
-  const months = ['January', 'February', 'March', 'April', 'May', 'June',
-                  'July', 'August', 'September', 'October', 'November', 'December'];
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
-}
-
-function buildTrustName(grantor1, grantor2) {
-  if (!grantor1) return 'LIVING TRUST';
-  
-  if (grantor2) {
-    // Check if same last name
-    const lastName1 = grantor1.split(' ').pop();
-    const lastName2 = grantor2.split(' ').pop();
-    if (lastName1 === lastName2) {
-      return `${lastName1.toUpperCase()} FAMILY LIVING TRUST`;
-    }
-    return `${grantor1.toUpperCase()} AND ${grantor2.toUpperCase()} LIVING TRUST`;
-  }
-  
-  return `${grantor1.toUpperCase()} LIVING TRUST`;
-}
-
-function buildGrantorNames(data) {
-  let names = data.grantor1Name || '';
-  if (data.grantor2Name) {
-    names += ` AND ${data.grantor2Name}`;
-  }
-  if (data.ownershipType) {
-    names += `, ${data.ownershipType}`;
-  }
-  return names;
-}
-
-function buildTrusteeNames(data, trustName, trustDate) {
-  let names = '';
-  if (data.grantor1Name) {
-    names = data.grantor1Name;
-    if (data.grantor2Name) {
-      names += ` AND ${data.grantor2Name}`;
-    }
-    names += `, TRUSTEE${data.grantor2Name ? 'S' : ''} OF THE ${trustName}`;
-    names += ` DATED ${trustDate}`;
-  }
-  return names;
-}
-
-function buildMailingInfo(data) {
-  const name = data.grantor1Name + (data.grantor2Name ? ` AND ${data.grantor2Name}` : '');
-  const address = data.mailingAddress || data.propertyAddress;
-  const city = data.mailingCity || data.propertyCity;
-  const state = data.mailingState || 'CA';
-  const zip = data.mailingZip || data.propertyZip;
-  
-  return {
-    name,
-    address,
-    cityStateZip: `${city}, ${state} ${zip}`,
-    full: `${name}\n${address}\n${city}, ${state} ${zip}`
-  };
-}
-
-function createFieldMappings(data, computed) {
-  // Try many field name variations
-  return {
-    // Recording section variations
-    'RECORDING REQUESTED BY': computed.trustName,
-    'Recording Requested By': computed.trustName,
-    'recording_requested_by': computed.trustName,
-    'RecordingRequestedBy': computed.trustName,
-    'recordingRequestedBy': computed.trustName,
-    'Text1': computed.trustName,
-    
-    // Mail to section variations
-    'WHEN RECORDED MAIL TO': computed.mailingInfo.full,
-    'When Recorded Mail To': computed.mailingInfo.full,
-    'mail_to_name': computed.mailingInfo.name,
-    'WhenRecordedMailTo': computed.mailingInfo.full,
-    'mailToName': computed.mailingInfo.name,
-    'NAME': computed.mailingInfo.name,
-    'Name': computed.mailingInfo.name,
-    'Text2': computed.mailingInfo.full,
-    
-    // Address variations
-    'ADDRESS': computed.mailingInfo.address,
-    'Address': computed.mailingInfo.address,
-    'mail_to_address': computed.mailingInfo.address,
-    'mailToAddress': computed.mailingInfo.address,
-    'StreetAddress': computed.mailingInfo.address,
-    'Text3': computed.mailingInfo.address,
-    
-    // City/State/ZIP variations
-    'CITY / STATE / ZIP': computed.mailingInfo.cityStateZip,
-    'CityStateZip': computed.mailingInfo.cityStateZip,
-    'mail_to_city_state_zip': computed.mailingInfo.cityStateZip,
-    'Text4': computed.mailingInfo.cityStateZip,
-    
-    // Separate city, state, zip
-    'CITY': data.mailingCity || data.propertyCity,
-    'City': data.mailingCity || data.propertyCity,
-    'STATE': data.mailingState || 'CA',
-    'State': data.mailingState || 'CA',
-    'ZIP': data.mailingZip || data.propertyZip,
-    'Zip': data.mailingZip || data.propertyZip,
-    'ZIP CODE': data.mailingZip || data.propertyZip,
-    
-    // APN variations
-    'APN': data.apn,
-    'apn': data.apn,
-    'Apn': data.apn,
-    'ParcelNumber': data.apn,
-    'Parcel No': data.apn,
-    'assessorsParcelNumber': data.apn,
-    'Text5': data.apn,
-    
-    // Grantor variations
-    'GRANTOR': computed.grantorNames,
-    'Grantor': computed.grantorNames,
-    'GRANTORS': computed.grantorNames,
-    'Grantors': computed.grantorNames,
-    'GRANTOR(S)': computed.grantorNames,
-    'grantor_names': computed.grantorNames,
-    'grantorNames': computed.grantorNames,
-    'Text6': computed.grantorNames,
-    
-    // Grantee/Trustee variations
-    'GRANTEE': computed.trusteeNames,
-    'Grantee': computed.trusteeNames,
-    'grantee_trust_name': computed.trusteeNames,
-    'granteeTrustName': computed.trusteeNames,
-    'Trustee': computed.trusteeNames,
-    'TRUSTEE': computed.trusteeNames,
-    'Text7': computed.trusteeNames,
-    
-    // Trust name alone
-    'Trust Name': computed.trustName,
-    'TRUST NAME': computed.trustName,
-    'trust_name': computed.trustName,
-    
-    // Legal description variations
-    'LEGAL DESCRIPTION': data.legalDescription,
-    'Legal Description': data.legalDescription,
-    'legal_description': data.legalDescription,
-    'legalDescription': data.legalDescription,
-    'LegalDesc': data.legalDescription,
-    'the CITY OF County of State of CA, described as': data.legalDescription,
-    'Text8': data.legalDescription,
-    
-    // Property address variations
-    'PROPERTY ADDRESS': data.propertyAddress,
-    'Property Address': data.propertyAddress,
-    'property_address': data.propertyAddress,
-    'propertyAddress': data.propertyAddress,
-    'Commonly known as': data.propertyAddress,
-    'CommonlyKnownAs': data.propertyAddress,
-    'Text9': data.propertyAddress,
-    
-    // City and County
-    'the CITY OF': data.propertyCity,
-    'County of': 'Los Angeles',
-    'State of': 'CA',
-    
-    // Date variations
-    'DATE': computed.dateStr,
-    'Date': computed.dateStr,
-    'date': computed.dateStr,
-    'ExecutionDate': computed.dateStr,
-    'execution_date': computed.dateStr,
-    'Dated': computed.dateStr,
-    'Text10': computed.dateStr,
-    
-    // Tax statement variations
-    'MAIL TAX STATEMENTS TO': computed.mailingInfo.full,
-    'MailTaxStatementsTo': computed.mailingInfo.full,
-    'tax_statements_to': computed.mailingInfo.full,
-    'TaxStatements': computed.mailingInfo.full
-  };
-}
-
-function fillFormFields(form, fields, fieldMappings) {
-  let filledCount = 0;
-  
-  // Try each mapping
-  for (const [fieldName, value] of Object.entries(fieldMappings)) {
-    if (!value) continue;
-    
-    try {
-      // Try exact match first
-      const field = form.getTextField(fieldName);
-      field.setText(value.toString());
-      console.log(`✓ Filled field "${fieldName}"`);
-      filledCount++;
-    } catch (e1) {
-      // Try case-insensitive search
-      const foundField = fields.find(f => {
-        const name = f.getName();
-        return name && name.toLowerCase() === fieldName.toLowerCase() &&
-               f.constructor.name.includes('TextField');
-      });
-      
-      if (foundField) {
-        try {
-          const textField = form.getTextField(foundField.getName());
-          textField.setText(value.toString());
-          console.log(`✓ Filled field "${foundField.getName()}" (case-insensitive)`);
-          filledCount++;
-        } catch (e2) {
-          // Field exists but couldn't be set
-        }
-      }
-    }
-  }
-  
-  return filledCount;
-}
-
-function handleCheckboxes(form, fields, data) {
-  let checkedCount = 0;
-  
-  // Find all checkbox fields
-  const checkboxes = fields.filter(f => f.constructor.name.includes('CheckBox'));
-  console.log(`Found ${checkboxes.length} checkboxes`);
-  
-  // For trust transfer, check the box indicating transfer to revocable trust
-  const trustCheckboxPatterns = [
-    /revocable.*trust/i,
-    /transfer.*grantor.*interest/i,
-    /R&T.*11930/i,
-    /section.*62/i
-  ];
-  
-  for (const checkbox of checkboxes) {
-    const name = checkbox.getName();
-    if (!name) continue;
-    
-    for (const pattern of trustCheckboxPatterns) {
-      if (pattern.test(name)) {
-        try {
-          const cb = form.getCheckBox(name);
-          cb.check();
-          console.log(`✓ Checked checkbox "${name}"`);
-          checkedCount++;
-          break;
-        } catch (e) {
-          console.log(`Could not check checkbox "${name}"`);
-        }
-      }
-    }
-  }
-  
-  return checkedCount;
-}
-
-async function addTextOverlay(pdfDoc, data) {
-  const pages = pdfDoc.getPages();
-  const firstPage = pages[0];
-  const { width, height } = firstPage.getSize();
-  
-  // Embed font
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  
-  // FIXED POSITIONING - Based on NGUYEN deed layout
-  const textItems = [
-    // Header box content
-    { text: data.trustName, x: 150, y: height - 100, font: font, size: 10 },
-    { text: data.mailingInfo.name, x: 150, y: height - 130, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 150, y: height - 145, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 160, font: font, size: 10 },
-    
-    // APN line (single position)
-    { text: `APN: ${data.apn}`, x: 120, y: height - 230, font: font, size: 10 },
-    
-    // Title (only appears once)
-    { text: 'TRUST TRANSFER DEED', x: 200, y: height - 270, font: boldFont, size: 14 },
-    
-    // Document content
-    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 340, font: font, size: 10 },
-    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 355, font: font, size: 10 },
-    { text: `the following described real property in ${data.propertyCity || 'the City'}, California:`, x: 120, y: height - 370, font: font, size: 10 },
-    
-    // Legal description (if available)
-    { text: data.legalDescription || '', x: 120, y: height - 400, font: font, size: 10, maxWidth: 450 },
-    
-    // Commonly known as
-    { text: `Commonly known as: ${data.propertyAddress}`, x: 120, y: height - 450, font: font, size: 10 },
-    
-    // Date
-    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 490, font: font, size: 10 },
-    
-    // Mail tax statements to (at bottom)
-    { text: 'MAIL TAX STATEMENTS TO:', x: 120, y: height - 580, font: boldFont, size: 10 },
-    { text: data.mailingInfo.name, x: 120, y: height - 600, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 120, y: height - 615, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 120, y: height - 630, font: font, size: 10 }
-  ];
-  
-  for (const item of textItems) {
-    if (!item.text) continue;
-    
-    if (item.maxWidth) {
-      // Handle text wrapping for long text
-      const lines = wrapText(item.text, item.font, item.size, item.maxWidth);
-      let yPos = item.y;
-      for (const line of lines) {
-        firstPage.drawText(line, {
-          x: item.x,
-          y: yPos,
-          size: item.size,
-          font: item.font,
-          color: rgb(0, 0, 0)
-        });
-        yPos -= item.size + 2;
-      }
-    } else {
-      firstPage.drawText(item.text, {
-        x: item.x,
-        y: item.y,
-        size: item.size,
-        font: item.font,
-        color: rgb(0, 0, 0)
-      });
-    }
-  }
-}
-
-function wrapText(text, font, fontSize, maxWidth) {
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-  
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    const width = font.widthOfTextAtSize(testLine, fontSize);
-    
-    if (width > maxWidth && currentLine) {
-      lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-  
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-  
-  return lines;
-}
