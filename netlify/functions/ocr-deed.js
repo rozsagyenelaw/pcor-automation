@@ -1,3 +1,4 @@
+
 const pdf = require('pdf-parse');
 
 exports.handler = async (event, context) => {
@@ -276,91 +277,38 @@ function extractAPNComprehensive(text) {
 }
 
 function extractLegalComprehensive(text) {
-  // First, let's try to find the section that contains the legal description
-  // by looking for common markers that appear before it
-  
   const patterns = [
-    // Primary pattern - after "State of CA, described as:" with flexible spacing
-    /State\s+of\s+(?:CA|California),?\s+described\s+as:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)\s+(?:as|AS):|(?:Dated|DATED):|APN:|Assessor|$)/is,
-    
-    // After "State of California" with various connectors
-    /State\s+of\s+(?:CA|California)[,\s]+(?:more\s+particularly\s+)?described\s+as\s+follows:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // After County and State
-    /County\s+of\s+[^,]+,?\s+State\s+of\s+(?:CA|California),?\s+(?:and\s+)?described\s+as:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // After City, County, State pattern
-    /(?:City|CITY)\s+(?:of|OF)\s+[^,]+,?\s+County\s+of\s+[^,]+,?\s+State\s+of\s+(?:CA|California),?\s+described\s+as:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // Look for PARCEL descriptions
-    /((?:PARCEL|Parcel)\s+(?:\d+|[A-Z]):[^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|Assessor|$)/is,
-    
-    // Look for LOT descriptions with more flexibility
-    /((?:LOT|Lot)\s+\d+[^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|Assessor|$)/is,
-    
-    // Look for THAT CERTAIN patterns
-    /((?:THAT|That)\s+(?:CERTAIN|certain)\s+(?:REAL\s+)?(?:PROPERTY|property)[^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // Look for "Real property in" pattern
-    /(?:Real\s+property|REAL\s+PROPERTY)\s+in\s+[^,]+,?\s+[^,]+,?\s+(?:CA|California),?\s+described\s+as:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // More generic "described as" after any location reference
-    /(?:situated|located)\s+in[^,]+,[^,]+,\s+(?:CA|California)[^:]*described\s+as:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // Very broad pattern - anything after "described as:"
-    /described\s+as:?\s*([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|Assessor|$)/is,
-    
-    // Fallback patterns for specific legal description formats
-    /(?:Legal\s+Description|LEGAL\s+DESCRIPTION)[:;\s]+([^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is,
-    
-    // Look for section/township/range format
-    /((?:Section|SECTION)\s+\d+[^]*?(?:Township|TOWNSHIP)[^]*?(?:Range|RANGE)[^]*?)(?=(?:Commonly|COMMONLY)\s+(?:known|KNOWN)|(?:Dated|DATED):|APN:|$)/is
+    // Primary pattern - after "State of CA, described as:"
+    /State\s+of\s+CA,?\s+described\s+as:\s*([^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
+    // Alternative - after "County of ... State of CA, described as:"
+    /County\s+of\s+[^,]+,?\s+State\s+of\s+CA,?\s+described\s+as:\s*([^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
+    // Another variation - "the CITY OF"
+    /the\s+CITY\s+OF\s+[^,]+,?\s+County\s+of\s+[^,]+,?\s+State\s+of\s+CA,?\s+described\s+as:\s*([^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
+    // PARCEL format (as fallback)
+    /(PARCEL\s+\d+:[^]*?)(?=Commonly\s+known\s+as:|COMMONLY\s+KNOWN\s+AS:|Dated:|DATED:|$)/is,
+    // Lot and Tract (fallback)
+    /(Lot\s+\d+[^\.]*?(?:Tract|Block)\s+(?:No\.?\s*)?\d+[^\.]*?(?:\.|(?=\n\n)))/is,
+    // Legal description section
+    /(?:Legal\s+Description|LEGAL\s+DESCRIPTION)[:;\s]+([^\.]+(?:\.[^\.]+){0,2}\.)/is,
+    // Real property described as
+    /(?:Real\s+property|Property)\s+(?:described\s+as|more\s+particularly\s+described\s+as)[:;\s]+([^\.]+(?:\.[^\.]+){0,2}\.)/is,
+    // That certain real property
+    /(That\s+certain\s+(?:real\s+)?property[^\.]+(?:\.[^\.]+){0,2}\.)/is
   ];
 
-  // Try each pattern
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match && match[1]) {
-      let desc = match[1]
-        .replace(/\s+/g, ' ')
-        .replace(/\n/g, ' ')
-        .trim();
-      
-      // Remove trailing punctuation and clean up
-      desc = desc.replace(/[,;:]+$/, '').trim();
-      
-      // Make sure we have something substantial (at least 10 characters)
-      if (desc && desc.length > 10) {
-        // Limit to 2000 characters
-        desc = desc.substring(0, 2000);
-        console.log('Found legal description with pattern:', pattern);
-        console.log('Legal description:', desc.substring(0, 200) + (desc.length > 200 ? '...' : ''));
+      let desc = match[1].replace(/\s+/g, ' ').replace(/\n/g, ' ').trim();
+      // Keep up to 2000 characters for complex legal descriptions
+      desc = desc.substring(0, 2000);
+      if (desc && desc.length > 10) { // Make sure we got something substantial
+        console.log('Found legal description:', desc.substring(0, 100) + '...');
         return desc;
       }
     }
   }
 
-  // If nothing found with patterns, try to extract text between known markers
-  // This is a last resort approach
-  const markerStart = text.search(/(?:described\s+as|DESCRIBED\s+AS):/i);
-  const markerEnd = text.search(/(?:Commonly\s+known\s+as|COMMONLY\s+KNOWN\s+AS|Dated|DATED|APN|Assessor)/i);
-  
-  if (markerStart > -1 && markerEnd > markerStart) {
-    const startPos = markerStart + text.substring(markerStart).indexOf(':') + 1;
-    let desc = text.substring(startPos, markerEnd)
-      .replace(/\s+/g, ' ')
-      .replace(/\n/g, ' ')
-      .trim();
-    
-    if (desc && desc.length > 10) {
-      desc = desc.substring(0, 2000);
-      console.log('Found legal description using marker extraction');
-      console.log('Legal description:', desc.substring(0, 200) + (desc.length > 200 ? '...' : ''));
-      return desc;
-    }
-  }
-
-  console.log('No legal description found');
   return '';
 }
 
