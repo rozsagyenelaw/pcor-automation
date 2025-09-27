@@ -54,7 +54,7 @@ exports.handler = async (event, context) => {
     const trusteeNames = buildTrusteeNames(data, trustName, trustDate);
     const mailingInfo = buildMailingInfo(data);
     
-    // If no form fields, create text overlay
+    // If no form fields, create text overlay with FIXED positioning
     if (fields.length === 0) {
       console.log('No form fields found, creating text overlay');
       await addTextOverlay(pdfDoc, {
@@ -374,20 +374,39 @@ async function addTextOverlay(pdfDoc, data) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   
-  // Add text at specific positions - ADJUSTED POSITIONS TO MOVE UP
+  // FIXED POSITIONING - Based on NGUYEN deed layout
   const textItems = [
-    { text: data.trustName, x: 150, y: height - 120, font: font, size: 10 },
-    { text: data.mailingInfo.name, x: 150, y: height - 150, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 150, y: height - 165, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 180, font: font, size: 10 },
-    { text: `APN: ${data.apn}`, x: 120, y: height - 250, font: font, size: 10 },
-    { text: 'TRUST TRANSFER DEED', x: 220, y: height - 290, font: boldFont, size: 14 },
-    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 330, font: font, size: 10 },
-    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 345, font: font, size: 10 },
-    { text: `the following described real property in ${data.propertyCity || 'Los Angeles'}, California:`, x: 120, y: height - 360, font: font, size: 10 },
-    { text: data.legalDescription || '', x: 120, y: height - 390, font: font, size: 10, maxWidth: 450 },
+    // Header box content
+    { text: data.trustName, x: 150, y: height - 100, font: font, size: 10 },
+    { text: data.mailingInfo.name, x: 150, y: height - 130, font: font, size: 10 },
+    { text: data.mailingInfo.address, x: 150, y: height - 145, font: font, size: 10 },
+    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 160, font: font, size: 10 },
+    
+    // APN line (single position)
+    { text: `APN: ${data.apn}`, x: 120, y: height - 230, font: font, size: 10 },
+    
+    // Title (only appears once)
+    { text: 'TRUST TRANSFER DEED', x: 200, y: height - 270, font: boldFont, size: 14 },
+    
+    // Document content
+    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 340, font: font, size: 10 },
+    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 355, font: font, size: 10 },
+    { text: `the following described real property in ${data.propertyCity || 'the City'}, California:`, x: 120, y: height - 370, font: font, size: 10 },
+    
+    // Legal description (if available)
+    { text: data.legalDescription || '', x: 120, y: height - 400, font: font, size: 10, maxWidth: 450 },
+    
+    // Commonly known as
     { text: `Commonly known as: ${data.propertyAddress}`, x: 120, y: height - 450, font: font, size: 10 },
-    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 480, font: font, size: 10 }
+    
+    // Date
+    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 490, font: font, size: 10 },
+    
+    // Mail tax statements to (at bottom)
+    { text: 'MAIL TAX STATEMENTS TO:', x: 120, y: height - 580, font: boldFont, size: 10 },
+    { text: data.mailingInfo.name, x: 120, y: height - 600, font: font, size: 10 },
+    { text: data.mailingInfo.address, x: 120, y: height - 615, font: font, size: 10 },
+    { text: data.mailingInfo.cityStateZip, x: 120, y: height - 630, font: font, size: 10 }
   ];
   
   for (const item of textItems) {
