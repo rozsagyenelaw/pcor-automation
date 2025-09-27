@@ -430,9 +430,6 @@
                         <h4 style="margin-bottom: 10px;">Trust Transfer Deed</h4>
                         <p class="help-text">Transfers property from individual names to trust</p>
                         <button class="btn" onclick="generateTrustDeed()">Generate Trust Transfer Deed</button>
-                        <span class="help-text" style="display: block; margin-top: 10px;">
-                            Note: Using improved function at /.netlify/functions/generate-trust-deed-improved
-                        </span>
                     </div>
                     
                     <div style="margin-bottom: 30px;">
@@ -450,9 +447,6 @@
                             </select>
                         </div>
                         <button class="btn" onclick="generatePCOR()">Generate PCOR Form</button>
-                        <span class="help-text" style="display: block; margin-top: 10px;">
-                            Note: Using improved function at /.netlify/functions/generate-pcor-improved
-                        </span>
                     </div>
                 </div>
                 
@@ -582,8 +576,8 @@
                     console.error('Python OCR error:', pythonError);
                 }
                 try {
-                    // Try the improved OCR function
-                    const response = await fetch('/.netlify/functions/ocr-deed-improved', {
+                    // Try the OCR function
+                    const response = await fetch('/.netlify/functions/ocr-deed', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -777,8 +771,8 @@
             console.log('Generating trust deed with data:', documentData);
             
             try {
-                // Use improved function
-                const response = await fetch('/.netlify/functions/generate-trust-deed-improved', {
+                // Use correct function name
+                const response = await fetch('/.netlify/functions/generate-trust-deed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(documentData)
@@ -820,8 +814,8 @@
             console.log('Generating PCOR for', county, 'with data:', documentData);
             
             try {
-                // Use improved function
-                const response = await fetch('/.netlify/functions/generate-pcor-improved', {
+                // Use correct function name
+                const response = await fetch('/.netlify/functions/generate-pcor', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -868,4 +862,3 @@
     </script>
 </body>
 </html>
-
