@@ -66,7 +66,7 @@ exports.handler = async (event, context) => {
       // Trust transfer section
       { text: 'This is a Trust Transfer under section 62 of the Revenue and Taxation Code and', x: 100, y: height - 373, font: font, size: 10 },
       { text: 'Grantor(s) has/have checked the applicable exclusions:', x: 100, y: height - 386, font: font, size: 10 },
-      { text: '☒ This conveyance transfers the Grantor\'s interest into his or her revocable trust, R&T', x: 100, y: height - 406, font: font, size: 10 },
+      { text: '[X] This conveyance transfers the Grantor\'s interest into his or her revocable trust, R&T', x: 100, y: height - 406, font: font, size: 10 },
       { text: '11930.', x: 115, y: height - 419, font: font, size: 10 },
       
       // Grant section
