@@ -556,7 +556,31 @@
             const reader = new FileReader();
             reader.onload = async function(e) {
                 const base64 = e.target.result.split(',')[1]; // Remove data:application/pdf;base64, prefix
-                
+                // Try Python OCR server first
+                console.log('Calling Python OCR at port 5001...');
+                try {
+                    const pyResponse = await fetch('http://localhost:5001/ocr', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ deed: base64 })
+                    });
+                    const pyResult = await pyResponse.json();
+                    console.log('Python OCR result:', pyResult);
+                    
+                    if (pyResult.success && pyResult.extractedInfo) {
+                        extractedDeedData = pyResult.extractedInfo;
+                        populateFields(pyResult.extractedInfo);
+                        showExtractionSummary(pyResult.extractedInfo);
+                        document.getElementById('ocr-loading').style.display = 'none';
+                        document.getElementById('upload-success').style.display = 'block';
+                        setTimeout(() => {
+                            document.querySelector('.tab:nth-child(2)').click();
+                        }, 2000);
+                        return;
+                    }
+                } catch (pythonError) {
+                    console.error('Python OCR error:', pythonError);
+                }
                 try {
                     // Try the improved OCR function
                     const response = await fetch('/.netlify/functions/ocr-deed-improved', {
@@ -844,3 +868,4 @@
     </script>
 </body>
 </html>
+
