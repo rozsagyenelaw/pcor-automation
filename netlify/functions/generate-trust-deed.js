@@ -183,17 +183,17 @@ function createFieldMappings(data, computed) {
     'recording_requested_by': computed.trustName,
     'RecordingRequestedBy': computed.trustName,
     'recordingRequestedBy': computed.trustName,
-    'Text1': computed.trustName, // Generic field name
+    'Text1': computed.trustName,
     
     // Mail to section variations
-    'WHEN RECORDED MAIL TO': computed.mailingInfo.name,
-    'When Recorded Mail To': computed.mailingInfo.name,
+    'WHEN RECORDED MAIL TO': computed.mailingInfo.full,
+    'When Recorded Mail To': computed.mailingInfo.full,
     'mail_to_name': computed.mailingInfo.name,
-    'WhenRecordedMailTo': computed.mailingInfo.name,
+    'WhenRecordedMailTo': computed.mailingInfo.full,
     'mailToName': computed.mailingInfo.name,
     'NAME': computed.mailingInfo.name,
     'Name': computed.mailingInfo.name,
-    'Text2': computed.mailingInfo.name,
+    'Text2': computed.mailingInfo.full,
     
     // Address variations
     'ADDRESS': computed.mailingInfo.address,
@@ -232,6 +232,7 @@ function createFieldMappings(data, computed) {
     'Grantor': computed.grantorNames,
     'GRANTORS': computed.grantorNames,
     'Grantors': computed.grantorNames,
+    'GRANTOR(S)': computed.grantorNames,
     'grantor_names': computed.grantorNames,
     'grantorNames': computed.grantorNames,
     'Text6': computed.grantorNames,
@@ -245,12 +246,18 @@ function createFieldMappings(data, computed) {
     'TRUSTEE': computed.trusteeNames,
     'Text7': computed.trusteeNames,
     
+    // Trust name alone
+    'Trust Name': computed.trustName,
+    'TRUST NAME': computed.trustName,
+    'trust_name': computed.trustName,
+    
     // Legal description variations
     'LEGAL DESCRIPTION': data.legalDescription,
     'Legal Description': data.legalDescription,
     'legal_description': data.legalDescription,
     'legalDescription': data.legalDescription,
     'LegalDesc': data.legalDescription,
+    'the CITY OF County of State of CA, described as': data.legalDescription,
     'Text8': data.legalDescription,
     
     // Property address variations
@@ -258,8 +265,14 @@ function createFieldMappings(data, computed) {
     'Property Address': data.propertyAddress,
     'property_address': data.propertyAddress,
     'propertyAddress': data.propertyAddress,
-    'CommonlyKnownAs': `Commonly known as: ${data.propertyAddress}`,
+    'Commonly known as': data.propertyAddress,
+    'CommonlyKnownAs': data.propertyAddress,
     'Text9': data.propertyAddress,
+    
+    // City and County
+    'the CITY OF': data.propertyCity,
+    'County of': 'Los Angeles',
+    'State of': 'CA',
     
     // Date variations
     'DATE': computed.dateStr,
@@ -322,12 +335,12 @@ function handleCheckboxes(form, fields, data) {
   const checkboxes = fields.filter(f => f.constructor.name.includes('CheckBox'));
   console.log(`Found ${checkboxes.length} checkboxes`);
   
-  // For trust transfer, typically check "Transfer to Trust" or similar
+  // For trust transfer, check the box indicating transfer to revocable trust
   const trustCheckboxPatterns = [
-    /trust/i,
-    /revocable/i,
-    /living/i,
-    /transfer.*trust/i
+    /revocable.*trust/i,
+    /transfer.*grantor.*interest/i,
+    /R&T.*11930/i,
+    /section.*62/i
   ];
   
   for (const checkbox of checkboxes) {
@@ -361,21 +374,20 @@ async function addTextOverlay(pdfDoc, data) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   
-  // Add text at specific positions
-  // These positions would need to be adjusted based on your template
+  // Add text at specific positions - FIXED: Changed GRANT DEED to TRUST TRANSFER DEED
   const textItems = [
-    { text: data.trustName, x: 150, y: height - 100, font: font, size: 10 },
-    { text: data.mailingInfo.name, x: 150, y: height - 130, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 150, y: height - 145, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 160, font: font, size: 10 },
-    { text: `APN: ${data.apn}`, x: 400, y: height - 100, font: font, size: 10 },
-    { text: 'GRANT DEED', x: 250, y: height - 200, font: boldFont, size: 14 },
-    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 50, y: height - 250, font: font, size: 10 },
-    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 50, y: height - 265, font: font, size: 10 },
-    { text: `the following described real property in ${data.propertyCity || 'the County'}, California:`, x: 50, y: height - 280, font: font, size: 10 },
-    { text: data.legalDescription, x: 50, y: height - 310, font: font, size: 10, maxWidth: 500 },
-    { text: `Commonly known as: ${data.propertyAddress}`, x: 50, y: height - 360, font: font, size: 10 },
-    { text: `Dated: ${data.dateStr}`, x: 50, y: 200, font: font, size: 10 }
+    { text: data.trustName, x: 150, y: height - 150, font: font, size: 10 },
+    { text: data.mailingInfo.name, x: 150, y: height - 180, font: font, size: 10 },
+    { text: data.mailingInfo.address, x: 150, y: height - 195, font: font, size: 10 },
+    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 210, font: font, size: 10 },
+    { text: `APN: ${data.apn}`, x: 120, y: height - 285, font: font, size: 10 },
+    { text: 'TRUST TRANSFER DEED', x: 220, y: height - 330, font: boldFont, size: 14 },
+    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 380, font: font, size: 10 },
+    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 395, font: font, size: 10 },
+    { text: `the following described real property in ${data.propertyCity || 'Los Angeles'}, California:`, x: 120, y: height - 410, font: font, size: 10 },
+    { text: data.legalDescription || '', x: 120, y: height - 440, font: font, size: 10, maxWidth: 450 },
+    { text: `Commonly known as: ${data.propertyAddress}`, x: 120, y: height - 520, font: font, size: 10 },
+    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 550, font: font, size: 10 }
   ];
   
   for (const item of textItems) {
