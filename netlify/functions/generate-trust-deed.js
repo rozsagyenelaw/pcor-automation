@@ -374,20 +374,20 @@ async function addTextOverlay(pdfDoc, data) {
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   
-  // Add text at specific positions - FIXED: Changed GRANT DEED to TRUST TRANSFER DEED
+  // Add text at specific positions - ADJUSTED POSITIONS TO MOVE UP
   const textItems = [
-    { text: data.trustName, x: 150, y: height - 150, font: font, size: 10 },
-    { text: data.mailingInfo.name, x: 150, y: height - 180, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 150, y: height - 195, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 210, font: font, size: 10 },
-    { text: `APN: ${data.apn}`, x: 120, y: height - 285, font: font, size: 10 },
-    { text: 'TRUST TRANSFER DEED', x: 220, y: height - 330, font: boldFont, size: 14 },
-    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 380, font: font, size: 10 },
-    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 395, font: font, size: 10 },
-    { text: `the following described real property in ${data.propertyCity || 'Los Angeles'}, California:`, x: 120, y: height - 410, font: font, size: 10 },
-    { text: data.legalDescription || '', x: 120, y: height - 440, font: font, size: 10, maxWidth: 450 },
-    { text: `Commonly known as: ${data.propertyAddress}`, x: 120, y: height - 520, font: font, size: 10 },
-    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 550, font: font, size: 10 }
+    { text: data.trustName, x: 150, y: height - 120, font: font, size: 10 },
+    { text: data.mailingInfo.name, x: 150, y: height - 150, font: font, size: 10 },
+    { text: data.mailingInfo.address, x: 150, y: height - 165, font: font, size: 10 },
+    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 180, font: font, size: 10 },
+    { text: `APN: ${data.apn}`, x: 120, y: height - 250, font: font, size: 10 },
+    { text: 'TRUST TRANSFER DEED', x: 220, y: height - 290, font: boldFont, size: 14 },
+    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 330, font: font, size: 10 },
+    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 345, font: font, size: 10 },
+    { text: `the following described real property in ${data.propertyCity || 'Los Angeles'}, California:`, x: 120, y: height - 360, font: font, size: 10 },
+    { text: data.legalDescription || '', x: 120, y: height - 390, font: font, size: 10, maxWidth: 450 },
+    { text: `Commonly known as: ${data.propertyAddress}`, x: 120, y: height - 450, font: font, size: 10 },
+    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 480, font: font, size: 10 }
   ];
   
   for (const item of textItems) {
