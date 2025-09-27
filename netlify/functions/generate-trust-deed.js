@@ -279,6 +279,9 @@ function buildMailingInfo(data) {
 }
 
 function wrapText(text, font, fontSize, maxWidth) {
+  // Remove newlines and extra spaces
+  text = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  
   const words = text.split(' ');
   const lines = [];
   let currentLine = '';
