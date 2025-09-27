@@ -118,6 +118,12 @@
             background: #6c757d;
             margin-left: 10px;
         }
+        .btn-word {
+            background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
+        }
+        .btn-text {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
         .extracted-info {
             background: #f7f9fc;
             border-radius: 10px;
@@ -242,6 +248,22 @@
         .extraction-item .empty {
             color: #999;
             font-style: italic;
+        }
+        .format-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .format-info p {
+            margin: 5px 0;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -428,8 +450,25 @@
                     
                     <div style="margin-bottom: 30px;">
                         <h4 style="margin-bottom: 10px;">Trust Transfer Deed</h4>
-                        <p class="help-text">Transfers property from individual names to trust</p>
-                        <button class="btn" onclick="generateTrustDeed()">Generate Trust Transfer Deed</button>
+                        <p class="help-text">Transfers property from individual names to trust - Choose your preferred format:</p>
+                        
+                        <div class="btn-group">
+                            <button class="btn" onclick="generateTrustDeed('pdf')" title="Best for printing and filing">
+                                📄 Generate as PDF
+                            </button>
+                            <button class="btn btn-word" onclick="generateTrustDeed('docx')" title="Editable format for modifications">
+                                📝 Generate as Word (.docx)
+                            </button>
+                            <button class="btn btn-text" onclick="generateTrustDeed('txt')" title="Simple text format">
+                                📋 Generate as Text (.txt)
+                            </button>
+                        </div>
+                        
+                        <div class="format-info">
+                            <p><strong>📄 PDF:</strong> Professional format for printing and filing with county recorder</p>
+                            <p><strong>📝 Word:</strong> Editable document for making modifications before finalizing</p>
+                            <p><strong>📋 Text:</strong> Simple format for easy copying and pasting</p>
+                        </div>
                     </div>
                     
                     <div style="margin-bottom: 30px;">
@@ -761,34 +800,67 @@
             console.log('Saved data:', documentData);
         }
         
-        async function generateTrustDeed() {
+        async function generateTrustDeed(format = 'pdf') {
             // Save current form data first
             saveInformation();
             
             document.getElementById('generate-success').style.display = 'none';
             document.getElementById('generate-error').style.display = 'none';
             
-            console.log('Generating trust deed with data:', documentData);
+            console.log(`Generating trust deed as ${format.toUpperCase()} with data:`, documentData);
             
             try {
-                // Use correct function name
+                // Send format parameter with the request
                 const response = await fetch('/.netlify/functions/generate-trust-deed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(documentData)
+                    body: JSON.stringify({
+                        data: documentData,
+                        format: format  // Specify the format
+                    })
                 });
                 
-                const data = await response.json();
-                console.log('Trust deed response:', data);
+                const result = await response.json();
+                console.log('Trust deed response:', result);
                 
-                if (data.success && data.pdfUrl) {
+                if (result.success) {
                     document.getElementById('generate-success').style.display = 'block';
+                    document.getElementById('generate-success').textContent = 
+                        `✓ Trust deed generated successfully as ${format.toUpperCase()}! Download should start automatically.`;
+                    
+                    // Determine the correct URL and filename based on format
+                    let dataUrl, fileName;
+                    
+                    switch(format.toLowerCase()) {
+                        case 'txt':
+                        case 'text':
+                            dataUrl = result.textUrl;
+                            fileName = `trust-transfer-deed-${documentData.apn || 'document'}.txt`;
+                            break;
+                            
+                        case 'docx':
+                        case 'word':
+                            dataUrl = result.docxUrl;
+                            fileName = `trust-transfer-deed-${documentData.apn || 'document'}.docx`;
+                            break;
+                            
+                        case 'pdf':
+                        default:
+                            dataUrl = result.pdfUrl;
+                            fileName = `trust-transfer-deed-${documentData.apn || 'document'}.pdf`;
+                            break;
+                    }
+                    
+                    // Download the file
                     const link = document.createElement('a');
-                    link.href = data.pdfUrl;
-                    link.download = `trust-transfer-deed-${documentData.apn || 'document'}.pdf`;
+                    link.href = dataUrl;
+                    link.download = fileName;
+                    document.body.appendChild(link);
                     link.click();
+                    document.body.removeChild(link);
+                    
                 } else {
-                    throw new Error(data.error || 'Failed to generate');
+                    throw new Error(result.error || 'Failed to generate');
                 }
             } catch (error) {
                 console.error('Error:', error);
