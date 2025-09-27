@@ -292,135 +292,99 @@ async function handlePCORCheckboxes(form, fields, data) {
   
   console.log(`Found ${checkboxes.length} total checkboxes`);
   
-  // IMPORTANT: First, uncheck all checkboxes to start clean
-  for (const checkbox of checkboxes) {
-    const name = checkbox.getName();
-    if (name) {
-      try {
-        const cb = form.getCheckBox(name);
-        cb.uncheck();
-      } catch (e) {
-        // Continue if unable to uncheck
-      }
-    }
-  }
-  
-  console.log('Unchecked all checkboxes to start clean');
-  
-  // For trust transfers, we need to check ONLY:
-  // 1. Principal Residence - YES 
-  // 2. Disabled Veteran - NO 
-  // 3. Part 1 Section L.1 - YES (Transfer to revocable trust)
+  // For trust transfers, we only check 3 specific boxes:
+  // 1. Principal Residence - YES (checkbox index 0)
+  // 2. Disabled Veteran - NO (checkbox index 3)
+  // 3. Part 1 Section L.1 - YES (checkbox around index 23-25)
   
   let checkedCount = 0;
   
-  // Check specific boxes by name patterns
-  for (const checkbox of checkboxes) {
+  // Process each checkbox by index
+  checkboxes.forEach((checkbox, index) => {
     const name = checkbox.getName() || '';
-    const lowerName = name.toLowerCase();
     
-    // Principal Residence YES - look for "yes" checkbox near "principal residence"
-    if ((lowerName.includes('principal') && lowerName.includes('residence') && lowerName.includes('yes')) ||
-        (lowerName === 'yes' && checkboxes.indexOf(checkbox) < 4)) { // First YES checkbox is usually principal residence
-      try {
-        const cb = form.getCheckBox(name);
+    try {
+      const cb = form.getCheckBox(name);
+      
+      // Principal Residence YES - typically the first checkbox
+      if (index === 0) {
         cb.check();
-        console.log(`✓ Checked Principal Residence YES: "${name}"`);
+        console.log(`✓ Checked Principal Residence YES at index ${index}: "${name}"`);
         checkedCount++;
-      } catch (e) {
-        console.log(`✗ Could not check Principal Residence YES: "${name}"`);
       }
-    }
-    
-    // Disabled Veteran NO - look for "no" checkbox near "veteran"
-    else if ((lowerName.includes('veteran') && lowerName.includes('no')) ||
-             (lowerName.includes('disabled') && lowerName.includes('no'))) {
-      try {
-        const cb = form.getCheckBox(name);
+      // Disabled Veteran NO - typically the 4th checkbox (index 3)
+      else if (index === 3) {
         cb.check();
-        console.log(`✓ Checked Disabled Veteran NO: "${name}"`);
+        console.log(`✓ Checked Disabled Veteran NO at index ${index}: "${name}"`);
         checkedCount++;
-      } catch (e) {
-        console.log(`✗ Could not check Disabled Veteran NO: "${name}"`);
       }
-    }
-    
-    // Part 1 Section L.1 - Transfer to revocable trust
-    else if (lowerName.includes('l1') || 
-             lowerName.includes('l.1') ||
-             (lowerName.includes('revocable') && lowerName.includes('trust')) ||
-             (lowerName.includes('transferor') && lowerName.includes('spouse')) ||
-             (lowerName.includes('section') && lowerName.includes('l') && lowerName.includes('1'))) {
-      try {
-        const cb = form.getCheckBox(name);
-        cb.check();
-        console.log(`✓ Checked Section L.1 (revocable trust): "${name}"`);
-        checkedCount++;
-      } catch (e) {
-        console.log(`✗ Could not check Section L.1: "${name}"`);
-      }
-    }
-    
-    // All Part 1 section checkboxes (A through Q) should be NO except L.1
-    else if (lowerName.match(/^[a-q]\.?$/) || // Matches A, B, C, etc. or A., B., C., etc.
-             lowerName.match(/^[a-q]\s/) || // Matches "A " followed by text
-             lowerName.match(/section\s+[a-q]/i)) { // Matches "Section A" etc.
-      // These should remain unchecked (NO)
-      console.log(`✗ Leaving unchecked (NO) for Part 1 section: "${name}"`);
-    }
-  }
-  
-  // If we couldn't find checkboxes by name, try by position
-  if (checkedCount < 3) {
-    console.log('Attempting position-based checkbox checking as fallback');
-    
-    // Get checkbox names
-    const cbNames = checkboxes.map(cb => cb.getName()).filter(name => name);
-    
-    // Principal Residence YES is typically the first or second checkbox
-    if (cbNames.length > 0) {
-      try {
-        const cb = form.getCheckBox(cbNames[0]);
-        cb.check();
-        console.log(`✓ Checked first checkbox (Principal Residence YES) by position`);
-        checkedCount++;
-      } catch (e) {
-        console.log('Could not check first checkbox');
-      }
-    }
-    
-    // Disabled Veteran NO is typically the 3rd or 4th checkbox
-    if (cbNames.length > 3) {
-      try {
-        const cb = form.getCheckBox(cbNames[3]);
-        cb.check();
-        console.log(`✓ Checked fourth checkbox (Disabled Veteran NO) by position`);
-        checkedCount++;
-      } catch (e) {
-        console.log('Could not check fourth checkbox');
-      }
-    }
-    
-    // Section L.1 is typically around checkbox 20-25 in the Part 1 section
-    if (cbNames.length > 24) {
-      for (let i = 20; i < Math.min(26, cbNames.length); i++) {
-        const name = cbNames[i];
-        if (name && (name.toLowerCase().includes('l') || name.toLowerCase().includes('revocable'))) {
-          try {
-            const cb = form.getCheckBox(name);
-            cb.check();
-            console.log(`✓ Checked Section L.1 by position at index ${i}: "${name}"`);
-            checkedCount++;
-            break;
-          } catch (e) {
-            continue;
-          }
+      // Section L.1 for trust transfers - typically around index 23-25
+      else if (index >= 23 && index <= 25) {
+        const lowerName = name.toLowerCase();
+        if (lowerName.includes('l') || lowerName.includes('revocable') || lowerName.includes('trust')) {
+          cb.check();
+          console.log(`✓ Checked Section L.1 at index ${index}: "${name}"`);
+          checkedCount++;
+        } else {
+          cb.uncheck();
         }
       }
+      // All other checkboxes should be unchecked
+      else {
+        cb.uncheck();
+        console.log(`✗ Unchecked box at index ${index}: "${name}"`);
+      }
+    } catch (e) {
+      console.log(`Could not modify checkbox at index ${index}: "${name}"`);
+    }
+  });
+  
+  // If we didn't get exactly 3 checks, try a more targeted approach
+  if (checkedCount !== 3) {
+    console.log('Attempting alternate checkbox identification strategy');
+    checkedCount = 0;
+    
+    for (const checkbox of checkboxes) {
+      const name = checkbox.getName() || '';
+      const lowerName = name.toLowerCase();
+      
+      try {
+        const cb = form.getCheckBox(name);
+        
+        // Look for specific patterns in checkbox names
+        if ((lowerName === 'yes' && checkboxes.indexOf(checkbox) === 0) ||
+            (lowerName.includes('principal') && lowerName.includes('yes')) ||
+            (lowerName === 'checkbox1')) {
+          cb.check();
+          console.log(`✓ Checked Principal Residence YES: "${name}"`);
+          checkedCount++;
+        }
+        else if ((lowerName === 'no' && checkboxes.indexOf(checkbox) === 3) ||
+                 (lowerName.includes('veteran') && lowerName.includes('no')) ||
+                 (lowerName === 'checkbox4')) {
+          cb.check();
+          console.log(`✓ Checked Disabled Veteran NO: "${name}"`);
+          checkedCount++;
+        }
+        else if (lowerName.includes('l1') || 
+                 lowerName.includes('l.1') ||
+                 (lowerName.includes('revocable') && lowerName.includes('trust')) ||
+                 lowerName === 'checkbox24' ||
+                 lowerName === 'checkbox25') {
+          cb.check();
+          console.log(`✓ Checked Section L.1: "${name}"`);
+          checkedCount++;
+        }
+        else {
+          cb.uncheck();
+        }
+      } catch (e) {
+        console.log(`Error processing checkbox: "${name}"`);
+      }
     }
   }
   
-  console.log(`Total checkboxes checked: ${checkedCount} (should be 3)`);
+  console.log(`Total checkboxes checked: ${checkedCount} (expected: 3)`);
   return checkedCount;
 }
 
