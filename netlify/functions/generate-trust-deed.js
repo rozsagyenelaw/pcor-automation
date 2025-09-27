@@ -38,108 +38,354 @@ exports.handler = async (event, context) => {
     const trusteeNames = buildTrusteeNames(data, trustName, trustDate);
     const mailingInfo = buildMailingInfo(data);
     
-    // Draw the complete trust deed document
-    const content = [
-      // Header box
-      { type: 'box', x: 100, y: height - 200, width: 400, height: 150 },
-      { text: 'RECORDING REQUESTED BY', x: 110, y: height - 80, font: boldFont, size: 10 },
-      { text: trustName, x: 110, y: height - 100, font: font, size: 10 },
-      { text: 'WHEN RECORDED MAIL TO', x: 110, y: height - 130, font: boldFont, size: 10 },
-      { text: mailingInfo.name, x: 110, y: height - 150, font: font, size: 10 },
-      { text: mailingInfo.address, x: 110, y: height - 165, font: font, size: 10 },
-      { text: mailingInfo.cityStateZip, x: 110, y: height - 180, font: font, size: 10 },
-      
-      // APN section
-      { text: `APN: ${data.apn}`, x: 100, y: height - 230, font: font, size: 10 },
-      { text: 'Escrow No.', x: 350, y: height - 230, font: font, size: 10 },
-      
-      // Title
-      { text: 'TRUST TRANSFER DEED', x: 200, y: height - 270, font: boldFont, size: 14 },
-      { text: '(Grant Deed Excluded from Reappraisal Under Proposition 13, i.e., Calif. Const. Art', x: 120, y: height - 285, font: font, size: 9 },
-      { text: '13A Section t, et seq.)', x: 120, y: height - 298, font: font, size: 9 },
-      
-      // Documentary transfer tax
-      { text: 'DOCUMENTARY TRANSFER TAX IS: $ 0', x: 100, y: height - 320, font: font, size: 10 },
-      { text: 'The undersigned Grantor(s) declare(s) under penalty of perjury that the foregoing is true', x: 100, y: height - 340, font: font, size: 10 },
-      { text: 'and correct: THERE IS NO CONSIDERATION FOR THIS TRANSFER.', x: 100, y: height - 353, font: font, size: 10 },
-      
-      // Trust transfer section
-      { text: 'This is a Trust Transfer under section 62 of the Revenue and Taxation Code and', x: 100, y: height - 373, font: font, size: 10 },
-      { text: 'Grantor(s) has/have checked the applicable exclusions:', x: 100, y: height - 386, font: font, size: 10 },
-      { text: '[X] This conveyance transfers the Grantors interest into his or her revocable trust, R&T', x: 100, y: height - 406, font: font, size: 10 },
-      { text: '11930.', x: 115, y: height - 419, font: font, size: 10 },
-      
-      // Grant section
-      { text: `GRANTOR(S) ${grantorNames}`, x: 100, y: height - 445, font: font, size: 10 },
-      { text: `, hereby GRANT(s) to`, x: 100, y: height - 458, font: font, size: 10 },
-      { text: trusteeNames, x: 100, y: height - 471, font: font, size: 10 },
-      { text: ', AND ANY AMENDMENTS THERETO the real property in', x: 100, y: height - 484, font: font, size: 10 },
-      { text: `the CITY OF ${data.propertyCity} County of Los Angeles State of CA, described as:`, x: 100, y: height - 497, font: font, size: 10 },
-      
-      // Legal description
-      { text: data.legalDescription || '', x: 100, y: height - 520, font: font, size: 10, maxWidth: 400 },
-      
-      // Commonly known as
-      { text: `Commonly known as: ${data.propertyAddress}`, x: 100, y: height - 560, font: font, size: 10 },
-      
-      // Date
-      { text: `Dated: ${dateStr}`, x: 100, y: height - 590, font: font, size: 10 },
-      
-      // Signature lines
-      { type: 'line', x: 100, y: height - 630, endX: 250, endY: height - 630 },
-      { type: 'line', x: 350, y: height - 630, endX: 500, endY: height - 630 },
-      { text: data.grantor1Name || '', x: 100, y: height - 645, font: font, size: 10 },
-      { text: data.grantor2Name || '', x: 350, y: height - 645, font: font, size: 10 },
-      
-      // Mail tax statements section
-      { text: 'MAIL TAX STATEMENTS TO:', x: 100, y: height - 680, font: boldFont, size: 10 },
-      { text: mailingInfo.name, x: 100, y: height - 700, font: font, size: 10 },
-      { text: mailingInfo.address, x: 100, y: height - 715, font: font, size: 10 },
-      { text: mailingInfo.cityStateZip, x: 100, y: height - 730, font: font, size: 10 }
-    ];
+    // Dynamic Y position tracking
+    let currentY = height - 80;
+    const lineHeight = 13;
+    const sectionGap = 20;
     
-    // Draw all content
-    for (const item of content) {
-      if (item.type === 'box') {
-        page.drawRectangle({
-          x: item.x,
-          y: item.y,
-          width: item.width,
-          height: item.height,
-          borderColor: rgb(0, 0, 0),
-          borderWidth: 1
+    // Header box
+    page.drawRectangle({
+      x: 100,
+      y: height - 200,
+      width: 400,
+      height: 150,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 1
+    });
+    
+    // Header content
+    page.drawText('RECORDING REQUESTED BY', {
+      x: 110,
+      y: currentY,
+      size: 10,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 20;
+    page.drawText(trustName, {
+      x: 110,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 30;
+    page.drawText('WHEN RECORDED MAIL TO', {
+      x: 110,
+      y: currentY,
+      size: 10,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 20;
+    page.drawText(mailingInfo.name, {
+      x: 110,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 15;
+    page.drawText(mailingInfo.address, {
+      x: 110,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 15;
+    page.drawText(mailingInfo.cityStateZip, {
+      x: 110,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    // Move below the box
+    currentY = height - 230;
+    
+    // APN section
+    page.drawText(`APN: ${data.apn || ''}`, {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    page.drawText('Escrow No.', {
+      x: 350,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 40;
+    
+    // Title
+    page.drawText('TRUST TRANSFER DEED', {
+      x: 200,
+      y: currentY,
+      size: 14,
+      font: boldFont,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 15;
+    page.drawText('(Grant Deed Excluded from Reappraisal Under Proposition 13, i.e., Calif. Const. Art', {
+      x: 120,
+      y: currentY,
+      size: 9,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    page.drawText('13A Section 1, et seq.)', {
+      x: 120,
+      y: currentY,
+      size: 9,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 22;
+    
+    // Documentary transfer tax
+    page.drawText('DOCUMENTARY TRANSFER TAX IS: $ 0', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 20;
+    page.drawText('The undersigned Grantor(s) declare(s) under penalty of perjury that the foregoing is true', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    page.drawText('and correct: THERE IS NO CONSIDERATION FOR THIS TRANSFER.', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 20;
+    
+    // Trust transfer section
+    page.drawText('This is a Trust Transfer under section 62 of the Revenue and Taxation Code and', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    page.drawText('Grantor(s) has/have checked the applicable exclusions:', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 20;
+    page.drawText('[X] This conveyance transfers the Grantors interest into his or her revocable trust, R&T', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    page.drawText('11930.', {
+      x: 115,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 26;
+    
+    // Grant section
+    page.drawText(`GRANTOR(S) ${grantorNames}`, {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    page.drawText(`, hereby GRANT(s) to`, {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    // Handle long trustee names
+    const trusteeLines = wrapText(trusteeNames, font, 10, 400);
+    for (const line of trusteeLines) {
+      page.drawText(line, {
+        x: 100,
+        y: currentY,
+        size: 10,
+        font: font,
+        color: rgb(0, 0, 0)
+      });
+      currentY -= 13;
+    }
+    
+    page.drawText(', AND ANY AMENDMENTS THERETO the real property in', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 13;
+    page.drawText(`the CITY OF ${data.propertyCity || ''} County of Los Angeles State of CA, described as:`, {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 23;
+    
+    // Legal description - DYNAMIC POSITIONING
+    if (data.legalDescription) {
+      const legalLines = wrapText(data.legalDescription, font, 10, 400);
+      for (const line of legalLines) {
+        page.drawText(line, {
+          x: 100,
+          y: currentY,
+          size: 10,
+          font: font,
+          color: rgb(0, 0, 0)
         });
-      } else if (item.type === 'line') {
-        page.drawLine({
-          start: { x: item.x, y: item.y },
-          end: { x: item.endX, y: item.endY },
-          color: rgb(0, 0, 0),
-          thickness: 1
-        });
-      } else if (item.text) {
-        if (item.maxWidth) {
-          const lines = wrapText(item.text, item.font, item.size, item.maxWidth);
-          let yPos = item.y;
-          for (const line of lines) {
-            page.drawText(line, {
-              x: item.x,
-              y: yPos,
-              size: item.size,
-              font: item.font,
-              color: rgb(0, 0, 0)
-            });
-            yPos -= item.size + 2;
-          }
-        } else {
-          page.drawText(item.text, {
-            x: item.x,
-            y: item.y,
-            size: item.size,
-            font: item.font,
-            color: rgb(0, 0, 0)
-          });
-        }
+        currentY -= 13;
       }
+    }
+    
+    // Add extra spacing after legal description
+    currentY -= 20;
+    
+    // Commonly known as
+    page.drawText(`Commonly known as: ${data.propertyAddress || ''}`, {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 30;
+    
+    // Date
+    page.drawText(`Dated: ${dateStr}`, {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    currentY -= 40;
+    
+    // Signature lines
+    page.drawLine({
+      start: { x: 100, y: currentY },
+      end: { x: 250, y: currentY },
+      color: rgb(0, 0, 0),
+      thickness: 1
+    });
+    
+    page.drawLine({
+      start: { x: 350, y: currentY },
+      end: { x: 500, y: currentY },
+      color: rgb(0, 0, 0),
+      thickness: 1
+    });
+    
+    currentY -= 15;
+    page.drawText(data.grantor1Name || '', {
+      x: 100,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    page.drawText(data.grantor2Name || '', {
+      x: 350,
+      y: currentY,
+      size: 10,
+      font: font,
+      color: rgb(0, 0, 0)
+    });
+    
+    // Only add mail tax statements section if there's enough space
+    if (currentY > 100) {
+      currentY -= 35;
+      
+      page.drawText('MAIL TAX STATEMENTS TO:', {
+        x: 100,
+        y: currentY,
+        size: 10,
+        font: boldFont,
+        color: rgb(0, 0, 0)
+      });
+      
+      currentY -= 20;
+      page.drawText(mailingInfo.name, {
+        x: 100,
+        y: currentY,
+        size: 10,
+        font: font,
+        color: rgb(0, 0, 0)
+      });
+      
+      currentY -= 15;
+      page.drawText(mailingInfo.address, {
+        x: 100,
+        y: currentY,
+        size: 10,
+        font: font,
+        color: rgb(0, 0, 0)
+      });
+      
+      currentY -= 15;
+      page.drawText(mailingInfo.cityStateZip, {
+        x: 100,
+        y: currentY,
+        size: 10,
+        font: font,
+        color: rgb(0, 0, 0)
+      });
     }
     
     // Add second page for notary
@@ -279,6 +525,8 @@ function buildMailingInfo(data) {
 }
 
 function wrapText(text, font, fontSize, maxWidth) {
+  if (!text) return [];
+  
   // Remove newlines and extra spaces
   text = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
   
