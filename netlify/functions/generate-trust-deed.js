@@ -20,72 +20,177 @@ exports.handler = async (event, context) => {
     const data = JSON.parse(event.body);
     console.log('Received data for trust deed:', data);
     
-    // Load template
-    const templateUrl = 'https://pcorautomation.netlify.app/templates/trust-transfer-deed-template.pdf';
-    const response = await fetch(templateUrl);
+    // Create a new blank PDF instead of loading template
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([612, 792]); // Letter size
+    const { width, height } = page.getSize();
     
-    if (!response.ok) {
-      throw new Error('Failed to load template: ' + response.statusText);
-    }
+    // Embed fonts
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     
-    const templateBytes = await response.buffer();
-    const pdfDoc = await PDFDocument.load(templateBytes);
-    
-    // Check if form exists
-    const form = pdfDoc.getForm();
-    const fields = form.getFields();
-    
-    console.log('Template has ' + fields.length + ' fields');
-    console.log('Field names:', fields.map(f => ({
-      name: f.getName(),
-      type: f.constructor.name
-    })));
-    
-    // Format dates
+    // Format data
     const today = new Date();
     const dateStr = formatDate(today);
     const trustDate = data.trustDate ? formatDate(new Date(data.trustDate)) : dateStr;
-    
-    // Build trust name
     const trustName = data.trustName || buildTrustName(data.grantor1Name, data.grantor2Name);
-    
-    // Build complete names and addresses
     const grantorNames = buildGrantorNames(data);
     const trusteeNames = buildTrusteeNames(data, trustName, trustDate);
     const mailingInfo = buildMailingInfo(data);
     
-    // If no form fields, create text overlay with FIXED positioning
-    if (fields.length === 0) {
-      console.log('No form fields found, creating text overlay');
-      await addTextOverlay(pdfDoc, {
-        grantorNames,
-        trusteeNames,
-        trustName,
-        propertyAddress: data.propertyAddress,
-        propertyCity: data.propertyCity,
-        propertyZip: data.propertyZip,
-        apn: data.apn,
-        legalDescription: data.legalDescription,
-        mailingInfo,
-        dateStr
-      });
-    } else {
-      // Fill form fields with multiple name variations
-      const fieldMappings = createFieldMappings(data, {
-        trustName,
-        grantorNames,
-        trusteeNames,
-        mailingInfo,
-        dateStr,
-        trustDate
-      });
+    // Draw the complete trust deed document
+    const content = [
+      // Header box
+      { type: 'box', x: 100, y: height - 200, width: 400, height: 150 },
+      { text: 'RECORDING REQUESTED BY', x: 110, y: height - 80, font: boldFont, size: 10 },
+      { text: trustName, x: 110, y: height - 100, font: font, size: 10 },
+      { text: 'WHEN RECORDED MAIL TO', x: 110, y: height - 130, font: boldFont, size: 10 },
+      { text: mailingInfo.name, x: 110, y: height - 150, font: font, size: 10 },
+      { text: mailingInfo.address, x: 110, y: height - 165, font: font, size: 10 },
+      { text: mailingInfo.cityStateZip, x: 110, y: height - 180, font: font, size: 10 },
       
-      let filledCount = fillFormFields(form, fields, fieldMappings);
+      // APN section
+      { text: `APN: ${data.apn}`, x: 100, y: height - 230, font: font, size: 10 },
+      { text: 'Escrow No.', x: 350, y: height - 230, font: font, size: 10 },
       
-      // Also try checkbox fields for transfer type
-      filledCount += handleCheckboxes(form, fields, data);
+      // Title
+      { text: 'TRUST TRANSFER DEED', x: 200, y: height - 270, font: boldFont, size: 14 },
+      { text: '(Grant Deed Excluded from Reappraisal Under Proposition 13, i.e., Calif. Const. Art', x: 120, y: height - 285, font: font, size: 9 },
+      { text: '13A Section t, et seq.)', x: 120, y: height - 298, font: font, size: 9 },
       
-      console.log(`Filled ${filledCount} fields`);
+      // Documentary transfer tax
+      { text: 'DOCUMENTARY TRANSFER TAX IS: $ 0', x: 100, y: height - 320, font: font, size: 10 },
+      { text: 'The undersigned Grantor(s) declare(s) under penalty of perjury that the foregoing is true', x: 100, y: height - 340, font: font, size: 10 },
+      { text: 'and correct: THERE IS NO CONSIDERATION FOR THIS TRANSFER.', x: 100, y: height - 353, font: font, size: 10 },
+      
+      // Trust transfer section
+      { text: 'This is a Trust Transfer under section 62 of the Revenue and Taxation Code and', x: 100, y: height - 373, font: font, size: 10 },
+      { text: 'Grantor(s) has/have checked the applicable exclusions:', x: 100, y: height - 386, font: font, size: 10 },
+      { text: '☒ This conveyance transfers the Grantor\'s interest into his or her revocable trust, R&T', x: 100, y: height - 406, font: font, size: 10 },
+      { text: '11930.', x: 115, y: height - 419, font: font, size: 10 },
+      
+      // Grant section
+      { text: `GRANTOR(S) ${grantorNames}`, x: 100, y: height - 445, font: font, size: 10 },
+      { text: `, hereby GRANT(s) to`, x: 100, y: height - 458, font: font, size: 10 },
+      { text: trusteeNames, x: 100, y: height - 471, font: font, size: 10 },
+      { text: ', AND ANY AMENDMENTS THERETO the real property in', x: 100, y: height - 484, font: font, size: 10 },
+      { text: `the CITY OF ${data.propertyCity} County of Los Angeles State of CA, described as:`, x: 100, y: height - 497, font: font, size: 10 },
+      
+      // Legal description
+      { text: data.legalDescription || '', x: 100, y: height - 520, font: font, size: 10, maxWidth: 400 },
+      
+      // Commonly known as
+      { text: `Commonly known as: ${data.propertyAddress}`, x: 100, y: height - 560, font: font, size: 10 },
+      
+      // Date
+      { text: `Dated: ${dateStr}`, x: 100, y: height - 590, font: font, size: 10 },
+      
+      // Signature lines
+      { type: 'line', x: 100, y: height - 630, endX: 250, endY: height - 630 },
+      { type: 'line', x: 350, y: height - 630, endX: 500, endY: height - 630 },
+      { text: data.grantor1Name || '', x: 100, y: height - 645, font: font, size: 10 },
+      { text: data.grantor2Name || '', x: 350, y: height - 645, font: font, size: 10 },
+      
+      // Mail tax statements section
+      { text: 'MAIL TAX STATEMENTS TO:', x: 100, y: height - 680, font: boldFont, size: 10 },
+      { text: mailingInfo.name, x: 100, y: height - 700, font: font, size: 10 },
+      { text: mailingInfo.address, x: 100, y: height - 715, font: font, size: 10 },
+      { text: mailingInfo.cityStateZip, x: 100, y: height - 730, font: font, size: 10 }
+    ];
+    
+    // Draw all content
+    for (const item of content) {
+      if (item.type === 'box') {
+        page.drawRectangle({
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          borderColor: rgb(0, 0, 0),
+          borderWidth: 1
+        });
+      } else if (item.type === 'line') {
+        page.drawLine({
+          start: { x: item.x, y: item.y },
+          end: { x: item.endX, y: item.endY },
+          color: rgb(0, 0, 0),
+          thickness: 1
+        });
+      } else if (item.text) {
+        if (item.maxWidth) {
+          const lines = wrapText(item.text, item.font, item.size, item.maxWidth);
+          let yPos = item.y;
+          for (const line of lines) {
+            page.drawText(line, {
+              x: item.x,
+              y: yPos,
+              size: item.size,
+              font: item.font,
+              color: rgb(0, 0, 0)
+            });
+            yPos -= item.size + 2;
+          }
+        } else {
+          page.drawText(item.text, {
+            x: item.x,
+            y: item.y,
+            size: item.size,
+            font: item.font,
+            color: rgb(0, 0, 0)
+          });
+        }
+      }
+    }
+    
+    // Add second page for notary
+    const page2 = pdfDoc.addPage([612, 792]);
+    const notaryContent = [
+      { text: 'STATE OF CALIFORNIA )', x: 100, y: 700, font: font, size: 11 },
+      { text: ')', x: 280, y: 685, font: font, size: 11 },
+      { text: 'COUNTY OF ______________)', x: 100, y: 670, font: font, size: 11 },
+      
+      { text: 'On ________________, before me, ___________________, a Notary Public, personally', x: 100, y: 630, font: font, size: 11 },
+      { text: 'appeared ________________________________, who proved to me on the basis', x: 100, y: 615, font: font, size: 11 },
+      { text: 'of satisfactory evidence to be the person whose name is subscribed to the within', x: 100, y: 600, font: font, size: 11 },
+      { text: 'instrument acknowledged to me that he/she/they executed the same in his/her/their', x: 100, y: 585, font: font, size: 11 },
+      { text: 'authorized capacity, and that by his/her/their signature on the instrument the person, or', x: 100, y: 570, font: font, size: 11 },
+      { text: 'the entity upon behalf of which the person acted, executed the instrument.', x: 100, y: 555, font: font, size: 11 },
+      
+      { text: 'I certify under PENALTY OF PERJURY under the laws of the State of California that the', x: 100, y: 520, font: font, size: 11 },
+      { text: 'foregoing paragraph is true and correct.', x: 100, y: 505, font: font, size: 11 },
+      
+      { text: 'WITNESS my hand and official seal.', x: 100, y: 470, font: font, size: 11 },
+      
+      { text: 'Notary Public __________________________________ (SEAL)', x: 100, y: 420, font: font, size: 11 },
+      { text: 'Print Name of Notary _______________________________', x: 100, y: 390, font: font, size: 11 },
+      { text: 'My Commission Expires: ______________.', x: 100, y: 360, font: font, size: 11 },
+      
+      // Notary notice box
+      { type: 'box', x: 100, y: 200, width: 400, height: 80 },
+      { text: 'A notary public or other officer completing this certificate verifies only the identity of the', x: 110, y: 260, font: font, size: 10 },
+      { text: 'individual who signed the document to which this certificate is attached, and not the', x: 110, y: 245, font: font, size: 10 },
+      { text: 'truthfulness, accuracy, or validity of that document.', x: 110, y: 230, font: font, size: 10 }
+    ];
+    
+    for (const item of notaryContent) {
+      if (item.type === 'box') {
+        page2.drawRectangle({
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          borderColor: rgb(0, 0, 0),
+          borderWidth: 2
+        });
+      } else if (item.text) {
+        page2.drawText(item.text, {
+          x: item.x,
+          y: item.y,
+          size: item.size,
+          font: item.font,
+          color: rgb(0, 0, 0)
+        });
+      }
     }
     
     const pdfBytes = await pdfDoc.save();
@@ -97,7 +202,7 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         success: true,
         pdfUrl: `data:application/pdf;base64,${base64}`,
-        message: `Trust deed generated successfully`
+        message: 'Trust deed generated successfully'
       })
     };
   } catch (error) {
@@ -123,7 +228,6 @@ function buildTrustName(grantor1, grantor2) {
   if (!grantor1) return 'LIVING TRUST';
   
   if (grantor2) {
-    // Check if same last name
     const lastName1 = grantor1.split(' ').pop();
     const lastName2 = grantor2.split(' ').pop();
     if (lastName1 === lastName2) {
@@ -172,270 +276,6 @@ function buildMailingInfo(data) {
     cityStateZip: `${city}, ${state} ${zip}`,
     full: `${name}\n${address}\n${city}, ${state} ${zip}`
   };
-}
-
-function createFieldMappings(data, computed) {
-  // Try many field name variations
-  return {
-    // Recording section variations
-    'RECORDING REQUESTED BY': computed.trustName,
-    'Recording Requested By': computed.trustName,
-    'recording_requested_by': computed.trustName,
-    'RecordingRequestedBy': computed.trustName,
-    'recordingRequestedBy': computed.trustName,
-    'Text1': computed.trustName,
-    
-    // Mail to section variations
-    'WHEN RECORDED MAIL TO': computed.mailingInfo.full,
-    'When Recorded Mail To': computed.mailingInfo.full,
-    'mail_to_name': computed.mailingInfo.name,
-    'WhenRecordedMailTo': computed.mailingInfo.full,
-    'mailToName': computed.mailingInfo.name,
-    'NAME': computed.mailingInfo.name,
-    'Name': computed.mailingInfo.name,
-    'Text2': computed.mailingInfo.full,
-    
-    // Address variations
-    'ADDRESS': computed.mailingInfo.address,
-    'Address': computed.mailingInfo.address,
-    'mail_to_address': computed.mailingInfo.address,
-    'mailToAddress': computed.mailingInfo.address,
-    'StreetAddress': computed.mailingInfo.address,
-    'Text3': computed.mailingInfo.address,
-    
-    // City/State/ZIP variations
-    'CITY / STATE / ZIP': computed.mailingInfo.cityStateZip,
-    'CityStateZip': computed.mailingInfo.cityStateZip,
-    'mail_to_city_state_zip': computed.mailingInfo.cityStateZip,
-    'Text4': computed.mailingInfo.cityStateZip,
-    
-    // Separate city, state, zip
-    'CITY': data.mailingCity || data.propertyCity,
-    'City': data.mailingCity || data.propertyCity,
-    'STATE': data.mailingState || 'CA',
-    'State': data.mailingState || 'CA',
-    'ZIP': data.mailingZip || data.propertyZip,
-    'Zip': data.mailingZip || data.propertyZip,
-    'ZIP CODE': data.mailingZip || data.propertyZip,
-    
-    // APN variations
-    'APN': data.apn,
-    'apn': data.apn,
-    'Apn': data.apn,
-    'ParcelNumber': data.apn,
-    'Parcel No': data.apn,
-    'assessorsParcelNumber': data.apn,
-    'Text5': data.apn,
-    
-    // Grantor variations
-    'GRANTOR': computed.grantorNames,
-    'Grantor': computed.grantorNames,
-    'GRANTORS': computed.grantorNames,
-    'Grantors': computed.grantorNames,
-    'GRANTOR(S)': computed.grantorNames,
-    'grantor_names': computed.grantorNames,
-    'grantorNames': computed.grantorNames,
-    'Text6': computed.grantorNames,
-    
-    // Grantee/Trustee variations
-    'GRANTEE': computed.trusteeNames,
-    'Grantee': computed.trusteeNames,
-    'grantee_trust_name': computed.trusteeNames,
-    'granteeTrustName': computed.trusteeNames,
-    'Trustee': computed.trusteeNames,
-    'TRUSTEE': computed.trusteeNames,
-    'Text7': computed.trusteeNames,
-    
-    // Trust name alone
-    'Trust Name': computed.trustName,
-    'TRUST NAME': computed.trustName,
-    'trust_name': computed.trustName,
-    
-    // Legal description variations
-    'LEGAL DESCRIPTION': data.legalDescription,
-    'Legal Description': data.legalDescription,
-    'legal_description': data.legalDescription,
-    'legalDescription': data.legalDescription,
-    'LegalDesc': data.legalDescription,
-    'the CITY OF County of State of CA, described as': data.legalDescription,
-    'Text8': data.legalDescription,
-    
-    // Property address variations
-    'PROPERTY ADDRESS': data.propertyAddress,
-    'Property Address': data.propertyAddress,
-    'property_address': data.propertyAddress,
-    'propertyAddress': data.propertyAddress,
-    'Commonly known as': data.propertyAddress,
-    'CommonlyKnownAs': data.propertyAddress,
-    'Text9': data.propertyAddress,
-    
-    // City and County
-    'the CITY OF': data.propertyCity,
-    'County of': 'Los Angeles',
-    'State of': 'CA',
-    
-    // Date variations
-    'DATE': computed.dateStr,
-    'Date': computed.dateStr,
-    'date': computed.dateStr,
-    'ExecutionDate': computed.dateStr,
-    'execution_date': computed.dateStr,
-    'Dated': computed.dateStr,
-    'Text10': computed.dateStr,
-    
-    // Tax statement variations
-    'MAIL TAX STATEMENTS TO': computed.mailingInfo.full,
-    'MailTaxStatementsTo': computed.mailingInfo.full,
-    'tax_statements_to': computed.mailingInfo.full,
-    'TaxStatements': computed.mailingInfo.full
-  };
-}
-
-function fillFormFields(form, fields, fieldMappings) {
-  let filledCount = 0;
-  
-  // Try each mapping
-  for (const [fieldName, value] of Object.entries(fieldMappings)) {
-    if (!value) continue;
-    
-    try {
-      // Try exact match first
-      const field = form.getTextField(fieldName);
-      field.setText(value.toString());
-      console.log(`✓ Filled field "${fieldName}"`);
-      filledCount++;
-    } catch (e1) {
-      // Try case-insensitive search
-      const foundField = fields.find(f => {
-        const name = f.getName();
-        return name && name.toLowerCase() === fieldName.toLowerCase() &&
-               f.constructor.name.includes('TextField');
-      });
-      
-      if (foundField) {
-        try {
-          const textField = form.getTextField(foundField.getName());
-          textField.setText(value.toString());
-          console.log(`✓ Filled field "${foundField.getName()}" (case-insensitive)`);
-          filledCount++;
-        } catch (e2) {
-          // Field exists but couldn't be set
-        }
-      }
-    }
-  }
-  
-  return filledCount;
-}
-
-function handleCheckboxes(form, fields, data) {
-  let checkedCount = 0;
-  
-  // Find all checkbox fields
-  const checkboxes = fields.filter(f => f.constructor.name.includes('CheckBox'));
-  console.log(`Found ${checkboxes.length} checkboxes`);
-  
-  // For trust transfer, check the box indicating transfer to revocable trust
-  const trustCheckboxPatterns = [
-    /revocable.*trust/i,
-    /transfer.*grantor.*interest/i,
-    /R&T.*11930/i,
-    /section.*62/i
-  ];
-  
-  for (const checkbox of checkboxes) {
-    const name = checkbox.getName();
-    if (!name) continue;
-    
-    for (const pattern of trustCheckboxPatterns) {
-      if (pattern.test(name)) {
-        try {
-          const cb = form.getCheckBox(name);
-          cb.check();
-          console.log(`✓ Checked checkbox "${name}"`);
-          checkedCount++;
-          break;
-        } catch (e) {
-          console.log(`Could not check checkbox "${name}"`);
-        }
-      }
-    }
-  }
-  
-  return checkedCount;
-}
-
-async function addTextOverlay(pdfDoc, data) {
-  const pages = pdfDoc.getPages();
-  const firstPage = pages[0];
-  const { width, height } = firstPage.getSize();
-  
-  // Embed font
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  
-  // FIXED POSITIONING - Based on NGUYEN deed layout
-  const textItems = [
-    // Header box content
-    { text: data.trustName, x: 150, y: height - 100, font: font, size: 10 },
-    { text: data.mailingInfo.name, x: 150, y: height - 130, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 150, y: height - 145, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 150, y: height - 160, font: font, size: 10 },
-    
-    // APN line (single position)
-    { text: `APN: ${data.apn}`, x: 120, y: height - 230, font: font, size: 10 },
-    
-    // Title (only appears once)
-    { text: 'TRUST TRANSFER DEED', x: 200, y: height - 270, font: boldFont, size: 14 },
-    
-    // Document content
-    { text: `FOR A VALUABLE CONSIDERATION, ${data.grantorNames}`, x: 120, y: height - 340, font: font, size: 10 },
-    { text: `hereby GRANT(S) to ${data.trusteeNames}`, x: 120, y: height - 355, font: font, size: 10 },
-    { text: `the following described real property in ${data.propertyCity || 'the City'}, California:`, x: 120, y: height - 370, font: font, size: 10 },
-    
-    // Legal description (if available)
-    { text: data.legalDescription || '', x: 120, y: height - 400, font: font, size: 10, maxWidth: 450 },
-    
-    // Commonly known as
-    { text: `Commonly known as: ${data.propertyAddress}`, x: 120, y: height - 450, font: font, size: 10 },
-    
-    // Date
-    { text: `Dated: ${data.dateStr}`, x: 120, y: height - 490, font: font, size: 10 },
-    
-    // Mail tax statements to (at bottom)
-    { text: 'MAIL TAX STATEMENTS TO:', x: 120, y: height - 580, font: boldFont, size: 10 },
-    { text: data.mailingInfo.name, x: 120, y: height - 600, font: font, size: 10 },
-    { text: data.mailingInfo.address, x: 120, y: height - 615, font: font, size: 10 },
-    { text: data.mailingInfo.cityStateZip, x: 120, y: height - 630, font: font, size: 10 }
-  ];
-  
-  for (const item of textItems) {
-    if (!item.text) continue;
-    
-    if (item.maxWidth) {
-      // Handle text wrapping for long text
-      const lines = wrapText(item.text, item.font, item.size, item.maxWidth);
-      let yPos = item.y;
-      for (const line of lines) {
-        firstPage.drawText(line, {
-          x: item.x,
-          y: yPos,
-          size: item.size,
-          font: item.font,
-          color: rgb(0, 0, 0)
-        });
-        yPos -= item.size + 2;
-      }
-    } else {
-      firstPage.drawText(item.text, {
-        x: item.x,
-        y: item.y,
-        size: item.size,
-        font: item.font,
-        color: rgb(0, 0, 0)
-      });
-    }
-  }
 }
 
 function wrapText(text, font, fontSize, maxWidth) {
