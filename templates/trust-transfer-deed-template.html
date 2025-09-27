@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Trust Transfer Deed</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 1in;
+        }
+        body {
+            font-family: 'Times New Roman', serif;
+            font-size: 12pt;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+        }
+        .header-box {
+            border: 1px solid black;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        .header-section {
+            margin-bottom: 10px;
+        }
+        .title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 14pt;
+            margin: 20px 0;
+        }
+        .subtitle {
+            text-align: center;
+            font-style: italic;
+            margin-bottom: 20px;
+        }
+        .field {
+            display: inline-block;
+            border-bottom: 1px solid black;
+            min-width: 200px;
+            padding: 0 5px;
+        }
+        .checkbox {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border: 1px solid black;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        .checkbox.checked::after {
+            content: "✓";
+            display: block;
+            text-align: center;
+            line-height: 15px;
+        }
+        .signature-line {
+            border-bottom: 1px solid black;
+            width: 200px;
+            display: inline-block;
+            margin: 0 20px;
+        }
+        .notary-section {
+            margin-top: 50px;
+            page-break-before: always;
+        }
+        .notary-box {
+            border: 2px solid black;
+            padding: 15px;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-box">
+        <div class="header-section">
+            <strong>RECORDING REQUESTED BY</strong><br>
+            <span class="field" id="recording-requested-by">[TRUST NAME]</span>
+        </div>
+        <div class="header-section">
+            <strong>WHEN RECORDED MAIL TO</strong><br>
+            <span class="field" id="mail-to-name">[GRANTOR NAMES]</span><br>
+            <span class="field" id="mail-to-address">[ADDRESS]</span><br>
+            <span class="field" id="mail-to-city-state-zip">[CITY, STATE ZIP]</span>
+        </div>
+    </div>
+
+    <div style="margin: 20px 0;">
+        <strong>APN:</strong> <span class="field" id="apn">[APN]</span>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <strong>Escrow No.</strong> <span class="field" id="escrow-no"></span>
+    </div>
+
+    <div class="title">TRUST TRANSFER DEED</div>
+    <div class="subtitle">(Grant Deed Excluded from Reappraisal Under Proposition 13, i.e., Calif. Const. Art 13A Section t, et seq.)</div>
+
+    <p><strong>DOCUMENTARY TRANSFER TAX IS: $</strong> <span class="field" style="min-width: 50px;">0</span></p>
+
+    <p>The undersigned Grantor(s) declare(s) under penalty of perjury that the foregoing is true and correct: THERE IS NO CONSIDERATION FOR THIS TRANSFER.</p>
+
+    <p>This is a Trust Transfer under section 62 of the Revenue and Taxation Code and Grantor(s) has/have checked the applicable exclusions:</p>
+
+    <p><span class="checkbox checked"></span> This conveyance transfers the Grantor's interest into his or her revocable trust, R&T 11930.</p>
+
+    <p>
+        <strong>GRANTOR(S)</strong> <span class="field" id="grantor-names">[GRANTOR NAMES WITH OWNERSHIP TYPE]</span>, 
+        hereby GRANT(s) to <span class="field" id="grantee-names">[TRUSTEE NAMES AND TRUST]</span>, 
+        AND ANY AMENDMENTS THERETO the real property in the CITY OF 
+        <span class="field" id="city">[CITY]</span> County of <span class="field" id="county">[COUNTY]</span> 
+        State of CA, described as:
+    </p>
+
+    <p class="field" id="legal-description" style="min-width: 100%; min-height: 60px; display: block; margin: 10px 0;">
+        [LEGAL DESCRIPTION]
+    </p>
+
+    <p><strong>Commonly known as:</strong> <span class="field" id="property-address">[PROPERTY ADDRESS]</span></p>
+
+    <p style="margin-top: 30px;"><strong>Dated:</strong> <span class="field" id="date">[DATE]</span></p>
+
+    <div style="margin: 40px 0;">
+        <span class="signature-line"></span>
+        <span class="signature-line"></span>
+    </div>
+    <div style="margin: 10px 0;">
+        <span style="margin: 0 20px;" id="grantor1-name">[GRANTOR 1 NAME]</span>
+        <span style="margin: 0 20px;" id="grantor2-name">[GRANTOR 2 NAME]</span>
+    </div>
+
+    <div style="margin-top: 40px;">
+        <strong>MAIL TAX STATEMENTS TO:</strong><br>
+        <span class="field" id="tax-mail-name">[GRANTOR NAMES]</span><br>
+        <span class="field" id="tax-mail-address">[ADDRESS]</span><br>
+        <span class="field" id="tax-mail-city-state-zip">[CITY, STATE ZIP]</span>
+    </div>
+
+    <!-- Notary Section -->
+    <div class="notary-section">
+        <strong>STATE OF CALIFORNIA</strong> )<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)<br>
+        <strong>COUNTY OF</strong> _______________)<br><br>
+
+        <p>On ________________, before me, ___________________, a Notary Public, personally appeared ________________________________, who proved to me on the basis of satisfactory evidence to be the person whose name is subscribed to the within instrument acknowledged to me that he/she/they executed the same in his/her/their authorized capacity, and that by his/her/their signature on the instrument the person, or the entity upon behalf of which the person acted, executed the instrument.</p>
+
+        <p>I certify under PENALTY OF PERJURY under the laws of the State of California that the foregoing paragraph is true and correct.</p>
+
+        <p>WITNESS my hand and official seal.</p>
+
+        <p style="margin-top: 40px;">
+            Notary Public __________________________________ (SEAL)<br><br>
+            Print Name of Notary _______________________________<br><br>
+            My Commission Expires: ______________.
+        </p>
+
+        <div class="notary-box">
+            <p style="text-align: center; margin: 0;">
+                A notary public or other officer completing this certificate verifies only the identity of the individual who signed the document to which this certificate is attached, and not the truthfulness, accuracy, or validity of that document.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
