@@ -592,7 +592,7 @@
                 // Try Python OCR server first
                 console.log('Calling Python OCR at port 5001...');
                 try {
-                    const pyResponse = await fetch('http://localhost:5001/ocr', {
+                    const pyResponse = await fetch('/.netlify/functions/ocr-deed', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ deed: base64 })
